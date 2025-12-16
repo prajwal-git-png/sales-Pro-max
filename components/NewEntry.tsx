@@ -1,10 +1,9 @@
-import React, { useState, useEffect } from 'react';
-import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Calculator, Sparkles, Loader2, Image as ImageIcon } from 'lucide-react';
-import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
+import React, { useState } from 'react';
+import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Image as ImageIcon, RefreshCcw } from 'lucide-react';
+import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
 import { SaleItem, UserProfile } from '../types';
-import { saveSaleEntry, compressImage, updateDailyReport, getSales } from '../services/storageService';
+import { saveSaleEntry, compressImage, getSales } from '../services/storageService';
 import { generateTextReport } from '../services/reportService';
-import { parseBillImage } from '../services/aiService';
 
 // --- Product Data Constant ---
 const PRODUCT_LIST = [
@@ -78,9 +77,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   const [billImages, setBillImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  
-  // AI State
-  const [isScanning, setIsScanning] = useState(false);
 
   // Week Off Logic
   const [isWeekOff, setIsWeekOff] = useState(false);
@@ -132,6 +128,9 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
       const newModes = [...inputModes];
       newModes[index] = newModes[index] === 'unit' ? 'total' : 'unit';
       setInputModes(newModes);
+      
+      // Reset price to 0 to avoid confusion when switching modes
+      updateItem(index, 'price', 0);
   };
 
   const handleProductSelect = (index: number, name: string) => {
@@ -150,29 +149,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
         alert('Error uploading images');
       }
     }
-  };
-
-  const handleSmartScan = async () => {
-      if (billImages.length === 0) return;
-      
-      const lastImage = billImages[billImages.length - 1];
-      if (!confirm("Use AI to extract items from the last uploaded image? This will replace current items.")) return;
-
-      setIsScanning(true);
-      try {
-          const scannedItems = await parseBillImage(lastImage);
-          if (scannedItems.length > 0) {
-              setItems(scannedItems);
-              setInputModes(scannedItems.map(() => 'unit'));
-          } else {
-              alert("Could not extract items. Please try a clearer image.");
-          }
-      } catch (e) {
-          alert("Failed to scan bill. Please try again.");
-          console.error(e);
-      } finally {
-          setIsScanning(false);
-      }
   };
 
   const removeImage = (index: number) => {
@@ -261,6 +237,8 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
 
   const totalValue = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
+  const formattedDate = date.split('-').reverse().join('/');
+
   return (
     <>
     <div className="space-y-6 animate-in slide-in-from-bottom-5 fade-in duration-500">
@@ -304,124 +282,139 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
             </div>
             
             {items.map((item, index) => {
-              const displayPrice = inputModes[index] === 'total' 
+              const mode = inputModes[index];
+              const displayPrice = mode === 'total' 
                   ? (item.price * item.quantity)
                   : item.price;
+              const calculatedTotal = item.price * item.quantity;
 
               return (
-              <div key={item.id} className="relative p-5 bg-white/40 dark:bg-zinc-900/40 backdrop-blur-xl rounded-2xl border border-white/30 dark:border-white/10 shadow-sm animate-in zoom-in-95 duration-200">
+              <div key={item.id} className="relative bg-white/40 dark:bg-zinc-900/40 backdrop-blur-xl rounded-2xl border border-white/30 dark:border-white/10 shadow-sm animate-in zoom-in-95 duration-200 overflow-hidden">
                 {items.length > 1 && (
                     <button 
                         type="button" 
                         onClick={() => removeItem(index)}
-                        className="absolute -top-2 -right-2 w-7 h-7 flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-500 rounded-full shadow-md hover:bg-red-200 transition-colors z-10"
+                        className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-500 rounded-full shadow-md hover:bg-red-200 transition-colors z-10"
                     >
                         <Trash2 size={14} />
                     </button>
                 )}
                 
-                {/* Product Name Search */}
-                <div className="space-y-1.5 relative z-20 mb-4">
-                    <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Product Model</label>
-                    <div className="relative">
-                        <div 
-                            className="flex items-center justify-between w-full bg-white/50 dark:bg-black/20 border border-white/20 dark:border-white/5 rounded-xl px-4 py-3 cursor-pointer hover:bg-white/70 transition-colors"
-                            onClick={() => {
-                                setActiveSearchIndex(index);
-                                setSearchTerm(item.productName);
-                            }}
-                        >
-                            <span className={`text-sm font-medium ${!item.productName && 'text-slate-400 italic'}`}>
-                                {item.productName || 'Select Product...'}
-                            </span>
-                            <ChevronDown size={16} className="text-slate-400" />
-                        </div>
+                <div className="p-5 space-y-4">
+                    {/* Product Name Search */}
+                    <div className="space-y-1.5 relative z-20">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Product Model</label>
+                        <div className="relative">
+                            <div 
+                                className="flex items-center justify-between w-full bg-white/50 dark:bg-black/20 border border-white/20 dark:border-white/5 rounded-xl px-4 py-3 cursor-pointer hover:bg-white/70 transition-colors"
+                                onClick={() => {
+                                    setActiveSearchIndex(index);
+                                    setSearchTerm(item.productName);
+                                }}
+                            >
+                                <span className={`text-sm font-medium ${!item.productName && 'text-slate-400 italic'}`}>
+                                    {item.productName || 'Select Product...'}
+                                </span>
+                                <ChevronDown size={16} className="text-slate-400" />
+                            </div>
 
-                        {activeSearchIndex === index && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-100 dark:border-white/10 max-h-60 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 z-50">
-                                <div className="p-2 border-b border-gray-100 dark:border-white/5 sticky top-0 bg-white/90 dark:bg-zinc-900/90 backdrop-blur">
-                                    <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/40 rounded-lg px-3 py-1.5">
-                                        <Search size={14} className="text-gray-400" />
-                                        <input 
-                                            autoFocus
-                                            className="w-full py-1 text-sm outline-none bg-transparent"
-                                            placeholder="Search model..."
-                                            value={searchTerm}
-                                            onChange={e => setSearchTerm(e.target.value)}
-                                        />
-                                        {searchTerm && <X size={14} className="text-gray-400 cursor-pointer" onClick={() => setSearchTerm('')} />}
+                            {activeSearchIndex === index && (
+                                <div className="absolute top-full left-0 right-0 mt-2 bg-white/95 dark:bg-zinc-900/95 backdrop-blur-xl rounded-xl shadow-2xl border border-gray-100 dark:border-white/10 max-h-60 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 z-50">
+                                    <div className="p-2 border-b border-gray-100 dark:border-white/5 sticky top-0 bg-white/90 dark:bg-zinc-900/90 backdrop-blur">
+                                        <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/40 rounded-lg px-3 py-1.5">
+                                            <Search size={14} className="text-gray-400" />
+                                            <input 
+                                                autoFocus
+                                                className="w-full py-1 text-sm outline-none bg-transparent"
+                                                placeholder="Search model..."
+                                                value={searchTerm}
+                                                onChange={e => setSearchTerm(e.target.value)}
+                                            />
+                                            {searchTerm && <X size={14} className="text-gray-400 cursor-pointer" onClick={() => setSearchTerm('')} />}
+                                        </div>
+                                    </div>
+                                    <div className="overflow-y-auto custom-scrollbar">
+                                        {filteredProducts.map(p => (
+                                            <div 
+                                                key={p} 
+                                                className="px-4 py-3 text-sm hover:bg-blue-50 dark:hover:bg-white/10 cursor-pointer border-b border-gray-50 dark:border-white/5 last:border-0"
+                                                onClick={() => handleProductSelect(index, p)}
+                                            >
+                                                {p}
+                                            </div>
+                                        ))}
+                                        {searchTerm && !filteredProducts.includes(searchTerm) && (
+                                            <div 
+                                                className="px-4 py-3 text-sm text-blue-600 cursor-pointer font-bold bg-blue-50/50"
+                                                onClick={() => handleProductSelect(index, searchTerm)}
+                                            >
+                                                + Add "{searchTerm}"
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                                <div className="overflow-y-auto custom-scrollbar">
-                                    {filteredProducts.map(p => (
-                                        <div 
-                                            key={p} 
-                                            className="px-4 py-3 text-sm hover:bg-blue-50 dark:hover:bg-white/10 cursor-pointer border-b border-gray-50 dark:border-white/5 last:border-0"
-                                            onClick={() => handleProductSelect(index, p)}
-                                        >
-                                            {p}
-                                        </div>
-                                    ))}
-                                    {searchTerm && !filteredProducts.includes(searchTerm) && (
-                                        <div 
-                                            className="px-4 py-3 text-sm text-blue-600 cursor-pointer font-bold bg-blue-50/50"
-                                            onClick={() => handleProductSelect(index, searchTerm)}
-                                        >
-                                            + Add "{searchTerm}"
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-                        )}
-                        {/* Backdrop for search */}
-                        {activeSearchIndex === index && (
-                            <div className="fixed inset-0 z-40 bg-black/5" onClick={() => setActiveSearchIndex(null)} />
-                        )}
-                    </div>
-                </div>
-
-                {/* Qty & Price Row */}
-                <div className="flex gap-4">
-                    {/* Qty */}
-                    <div className="w-24 shrink-0 space-y-1.5">
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Qty</label>
-                        <input 
-                            type="number"
-                            min="1"
-                            className="w-full bg-white/50 dark:bg-black/20 border-b-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 rounded-t-lg px-3 py-2.5 text-center font-mono text-lg font-semibold outline-none transition-all"
-                            value={item.quantity}
-                            onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                            required
-                        />
-                    </div>
-                    {/* Price */}
-                    <div className="flex-1 space-y-1.5">
-                        <div className="flex justify-between items-center px-1">
-                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                                {inputModes[index] === 'total' ? 'Total Amount' : 'Unit Price'}
-                            </label>
-                            <button 
-                                type="button" 
-                                onClick={() => togglePriceMode(index)}
-                                className={`text-[9px] font-bold px-2 py-0.5 rounded-full transition-all uppercase tracking-wide border ${inputModes[index] === 'total' ? 'bg-blue-100 text-blue-600 border-blue-200' : 'bg-slate-100 text-slate-500 border-slate-200 dark:bg-zinc-800 dark:text-slate-400 dark:border-zinc-700'}`}
-                            >
-                                {inputModes[index] === 'total' ? 'Auto-Calc Unit' : 'Enter Total'}
-                            </button>
+                            )}
+                            {/* Backdrop for search */}
+                            {activeSearchIndex === index && (
+                                <div className="fixed inset-0 z-40 bg-black/5" onClick={() => setActiveSearchIndex(null)} />
+                            )}
                         </div>
-                        <div className="relative group">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium z-10">₹</span>
+                    </div>
+
+                    {/* Qty & Price Row - Using Grid for alignment */}
+                    <div className="grid grid-cols-2 gap-4">
+                        {/* Column 1: Quantity */}
+                        <div className="space-y-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Quantity</label>
                             <input 
                                 type="number"
-                                min="0"
-                                step="any"
-                                className="w-full bg-white/50 dark:bg-black/20 border-b-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 rounded-t-lg pl-8 pr-3 py-2.5 font-mono text-lg font-semibold outline-none transition-all"
-                                value={displayPrice || ''}
-                                onChange={e => updatePrice(index, parseFloat(e.target.value) || 0)}
+                                min="1"
+                                className="w-full bg-white/50 dark:bg-black/20 border-b-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 rounded-t-lg px-3 py-2.5 text-center font-mono text-lg font-semibold outline-none transition-all h-12"
+                                value={item.quantity}
+                                onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
                                 required
                             />
                         </div>
+
+                        {/* Column 2: Price (Unit or Total based on mode) */}
+                        <div className="space-y-1.5 relative">
+                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
+                                {mode === 'total' ? 'Total Amount' : 'Unit Price'}
+                            </label>
+                            <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium z-10">₹</span>
+                                <input 
+                                    type="number"
+                                    min="0"
+                                    step="any"
+                                    className={`w-full bg-white/50 dark:bg-black/20 border-b-2 rounded-t-lg pl-8 pr-3 py-2.5 font-mono text-lg font-semibold outline-none transition-all h-12 ${
+                                        mode === 'total' ? 'border-purple-300 focus:border-purple-500 text-purple-700 dark:text-purple-300' : 'border-slate-200 dark:border-slate-700 focus:border-blue-500'
+                                    }`}
+                                    value={displayPrice || ''}
+                                    onChange={e => updatePrice(index, parseFloat(e.target.value) || 0)}
+                                    required
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
+
+                {/* Footer Logic for Calculation Mode */}
+                <div className="bg-slate-50/50 dark:bg-black/30 border-t border-white/20 dark:border-white/5 p-3 flex justify-between items-center">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-medium px-2">
+                        Total: <span className="text-slate-800 dark:text-white font-bold ml-1">₹{calculatedTotal.toLocaleString()}</span>
+                    </div>
+                    
+                    <button 
+                        type="button" 
+                        onClick={() => togglePriceMode(index)}
+                        className="text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors shadow-sm"
+                    >
+                        <RefreshCcw size={10} className={mode === 'total' ? 'text-purple-500' : ''} />
+                        {mode === 'total' ? 'Input Unit Price' : 'Input Total Amount'}
+                    </button>
+                </div>
+
               </div>
             )})}
           </div>
@@ -436,17 +429,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                     <p className="text-xs text-slate-500">{billImages.length} images selected</p>
                 </div>
                 <div className="flex gap-2">
-                    {billImages.length > 0 && (
-                        <button
-                            type="button"
-                            onClick={handleSmartScan}
-                            disabled={isScanning}
-                            className="bg-gradient-to-r from-purple-500 to-pink-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 hover:shadow-lg hover:shadow-purple-500/20 transition-all disabled:opacity-50"
-                        >
-                            {isScanning ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-                            {isScanning ? 'Scanning...' : 'Smart Scan'}
-                        </button>
-                    )}
                     <label className="cursor-pointer bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors">
                         <Camera size={14} /> Add
                         <input type="file" multiple accept="image/*" onChange={handleImageUpload} className="hidden" />
@@ -506,8 +488,8 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
             </div>
             <p className="text-slate-600 dark:text-slate-300 font-medium">
                 {isWeekOff 
-                    ? `Marked ${date} as Week Off.` 
-                    : `Your data has been added to the cumulative report for ${date}.`
+                    ? `Marked ${formattedDate} as Week Off.` 
+                    : `Your data has been added to the cumulative report for ${formattedDate}.`
                 }
             </p>
             

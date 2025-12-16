@@ -1,15 +1,14 @@
 import React from 'react';
 
-interface GlassCardProps {
+interface GlassCardProps extends React.HTMLAttributes<HTMLDivElement> {
   children?: React.ReactNode;
   className?: string;
-  onClick?: () => void;
 }
 
-export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', onClick }) => (
+export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', ...props }) => (
   <div 
-    onClick={onClick}
     className={`bg-white/60 dark:bg-zinc-900/60 backdrop-blur-md border border-white/40 dark:border-white/10 rounded-2xl shadow-lg ${className}`}
+    {...props}
   >
     {children}
   </div>
@@ -17,7 +16,7 @@ export const GlassCard: React.FC<GlassCardProps> = ({ children, className = '', 
 
 export const GlassInput = ({ className = '', ...props }: React.InputHTMLAttributes<HTMLInputElement>) => (
   <input
-    className={`w-full bg-white/40 dark:bg-zinc-800/50 backdrop-blur-sm border border-white/30 dark:border-white/10 rounded-xl px-4 py-3 text-slate-800 dark:text-white placeholder-slate-500 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all ${className}`}
+    className={`w-full bg-white/40 dark:bg-zinc-800/50 backdrop-blur-sm border border-white/30 dark:border-white/10 rounded-xl px-4 py-3 text-slate-800 dark:text-white placeholder-slate-500 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20 transition-all ${className}`}
     {...props}
   />
 );
@@ -28,18 +27,30 @@ interface GlassButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement>
 
 export const GlassButton: React.FC<GlassButtonProps> = ({ children, variant = 'primary', className = '', ...props }) => {
   const variants = {
-    // Made primary button more colorful with a rich gradient
-    primary: 'bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:via-indigo-500 hover:to-purple-500 text-white shadow-lg shadow-blue-500/30 border border-white/10',
+    // AI-Style: Black bg with Shiny Text (Light mode), White bg with Dark Shiny Text (Dark mode)
+    primary: `
+      bg-zinc-950 dark:bg-zinc-100 
+      shadow-xl shadow-zinc-900/20 dark:shadow-white/10
+      border border-zinc-800 dark:border-zinc-200
+      group relative overflow-hidden
+    `,
     secondary: 'bg-white/40 dark:bg-zinc-800 hover:bg-white/60 dark:hover:bg-zinc-700 text-slate-800 dark:text-white border border-white/20 dark:border-white/5',
     danger: 'bg-gradient-to-r from-red-500 to-pink-600 hover:from-red-400 hover:to-pink-500 text-white shadow-lg shadow-red-500/30 border border-white/10'
   };
 
   return (
     <button
-      className={`relative overflow-hidden backdrop-blur-md px-6 py-3 rounded-xl font-semibold active:scale-95 transition-all duration-200 flex items-center justify-center gap-2 ${variants[variant]} ${className}`}
+      className={`relative px-6 py-3 rounded-xl font-bold active:scale-95 transition-all duration-300 flex items-center justify-center gap-2 ${variants[variant]} ${className}`}
       {...props}
     >
-      {children}
+      {/* Shiny Text Effect for Primary Button */}
+      {variant === 'primary' ? (
+        <span className="relative z-10 flex items-center gap-2 bg-gradient-to-r from-zinc-400 via-white to-zinc-400 dark:from-zinc-500 dark:via-black dark:to-zinc-500 bg-[length:200%_auto] bg-clip-text text-transparent animate-shine">
+          {children}
+        </span>
+      ) : (
+        <span className="relative z-10 flex items-center gap-2">{children}</span>
+      )}
     </button>
   );
 };

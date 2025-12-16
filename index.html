@@ -22,6 +22,16 @@
             },
             backdropBlur: {
               xs: '2px',
+            },
+            animation: {
+              'shine': 'shine 3s linear infinite',
+              'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+              shine: {
+                '0%': { backgroundPosition: '200% center' },
+                '100%': { backgroundPosition: '-200% center' },
+              }
             }
           }
         }

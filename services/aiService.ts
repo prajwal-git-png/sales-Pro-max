@@ -1,95 +1,53 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { SaleItem, UserProfile, DailyReport } from "../types";
+import { GoogleGenAI, Chat } from "@google/genai";
+import { UserProfile, DailyReport } from "../types";
 
 // @ts-ignore - process.env provided by build environment
 const apiKey = process.env.API_KEY;
 
 const ai = new GoogleGenAI({ apiKey });
 
-export const parseBillImage = async (base64Image: string): Promise<SaleItem[]> => {
-  try {
-    // Extract base64 data and mime type
-    const [header, base64Data] = base64Image.split(',');
-    const mimeType = header.match(/:(.*?);/)?.[1] || 'image/jpeg';
+export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): Chat => {
+    // Prepare context
+    const recentSales = sales
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+        .slice(0, 10);
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: {
-        parts: [
-            {
-                inlineData: {
-                    mimeType: mimeType,
-                    data: base64Data
-                }
-            },
-            {
-                text: "Extract product items, quantities, and unit prices from this bill image. Return a clean JSON array."
-            }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              productName: { type: Type.STRING, description: "Name of the product" },
-              quantity: { type: Type.NUMBER, description: "Quantity sold" },
-              price: { type: Type.NUMBER, description: "Unit price of the product" }
-            },
-            required: ["productName", "quantity", "price"]
-          }
+    const systemInstruction = `
+        You are an expert Bajaj Electricals Sales Coach and Product Knowledge Specialist. 
+        Your User is ${user.name} from the store "${user.storeName}". 
+        Their monthly target is ${user.monthlyTarget}.
+        
+        Your Capabilities:
+        1. Analyze their sales performance based on provided data.
+        2. Answer technical questions about Bajaj products (Mixers, Geysers, Irons, etc.) including Features, Warranty, and USPs.
+        3. Provide tips to close sales.
+
+        STRICT FORMATTING RULES:
+        - Do NOT use Markdown symbols like asterisks (** or *), hashes (#), backticks (\`), or underscores (_).
+        - Output CLEAN plain text only.
+        - Use Emojis (🔹, ✅, ⚡, etc.) to create lists or structure instead of markdown bullets.
+        - Keep responses concise, chatty, and encouraging.
+        
+        Recent Sales Context: ${JSON.stringify(recentSales)}
+    `;
+
+    return ai.chats.create({
+        model: 'gemini-2.5-flash',
+        config: {
+            systemInstruction: systemInstruction,
         }
-      }
     });
-
-    if (response.text) {
-      const data = JSON.parse(response.text);
-      return data.map((item: any) => ({
-        id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-        productName: item.productName || "Unknown Item",
-        quantity: Number(item.quantity) || 1,
-        price: Number(item.price) || 0
-      }));
-    }
-    return [];
-  } catch (error) {
-    console.error("AI Parse Error:", error);
-    throw new Error("Failed to parse bill image");
-  }
 };
 
-export const getSalesInsights = async (user: UserProfile, sales: DailyReport[]): Promise<string> => {
+export const getMotivationalQuote = async (): Promise<string> => {
     try {
-        const recentSales = sales
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            .slice(0, 10); // Last 10 entries to save tokens
-
-        const prompt = `
-            You are a helpful Sales Coach. 
-            User: ${user.name}
-            Monthly Target: ${user.monthlyTarget}
-            Recent Performance (Last 10 Days): ${JSON.stringify(recentSales)}
-            
-            Analyze the performance. 
-            1. Calculate MTD (Month to Date) rough estimate.
-            2. Compare with target.
-            3. Provide 3 specific, encouraging, and actionable tips to help achieve the target.
-            Keep the tone professional yet motivating. Format with Markdown.
-        `;
-
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                systemInstruction: "You are an expert sales performance analyst and coach.",
-            }
+            contents: 'Generate a short, powerful, unique motivational quote specifically for a retail sales executive to boost their morale. Max 15 words. End with one relevant emoji. Plain text only.',
         });
-
-        return response.text || "No insights available at the moment.";
+        return response.text || "Success is a journey, not a destination. 🚀";
     } catch (error) {
-        console.error("AI Insight Error:", error);
-        throw new Error("Failed to generate insights");
+        console.error("AI Quote Error:", error);
+        return "Your hard work today is your success tomorrow. 💪";
     }
 };

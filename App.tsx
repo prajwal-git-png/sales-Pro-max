@@ -76,6 +76,7 @@ const App = () => {
       isDark={isDark}
       toggleTheme={toggleTheme}
       user={user}
+      salesData={salesData}
     >
       {activeTab === 'dashboard' && <Dashboard sales={salesData} user={user} onDataChange={refreshData} />}
       {activeTab === 'entry' && <NewEntry user={user} onEntryComplete={refreshData} />}
