@@ -33,7 +33,9 @@ export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): C
         model: 'gemini-2.5-flash',
         config: {
             systemInstruction: systemInstruction,
-            maxOutputTokens: 300, // Limit tokens to save cost/quota
+            // Fix: Set thinkingBudget when using maxOutputTokens to avoid errors with 2.5 models
+            maxOutputTokens: 300, 
+            thinkingConfig: { thinkingBudget: 0 }
         }
     });
 };
@@ -45,7 +47,11 @@ export const getMotivationalQuote = async (): Promise<string> => {
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: 'Generate a short, powerful retail sales motivation quote. Max 15 words. Plain text.',
-            config: { maxOutputTokens: 50 }
+            // Fix: Set thinkingBudget when using maxOutputTokens to avoid errors with 2.5 models
+            config: { 
+                maxOutputTokens: 50,
+                thinkingConfig: { thinkingBudget: 0 }
+            }
         });
         return response.text || "Success is a journey, not a destination. 🚀";
     } catch (error) {
