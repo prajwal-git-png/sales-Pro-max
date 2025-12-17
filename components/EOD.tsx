@@ -168,16 +168,23 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
             {viewMode === 'entry' ? (
                 <>
                     <GlassCard className="p-5 space-y-4 shadow-xl">
-                        <div className="flex items-center gap-3 border-b border-gray-100 dark:border-white/10 pb-3">
-                            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
+                        {/* Custom Date Display Overlay to force DD/MM/YYYY format */}
+                        <div className="flex items-center gap-3 border-b border-gray-100 dark:border-white/10 pb-3 relative">
+                            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500 pointer-events-none">
                                 <CalendarIcon size={20} />
                             </div>
-                            <input 
-                                type="date" 
-                                value={date} 
-                                onChange={e => setDate(e.target.value)}
-                                className="bg-transparent font-bold text-lg outline-none w-full"
-                            />
+                            <div className="flex-1 relative">
+                                <span className="absolute inset-0 flex items-center font-bold text-lg pointer-events-none text-slate-800 dark:text-white">
+                                    {formatToDisplayDate(date)}
+                                </span>
+                                <input 
+                                    type="date" 
+                                    value={date} 
+                                    onChange={e => setDate(e.target.value)}
+                                    className="opacity-0 absolute inset-0 w-full h-full cursor-pointer"
+                                />
+                            </div>
+                            <ChevronRight size={16} className="text-slate-400 transform rotate-90" />
                         </div>
 
                         <div className="grid grid-cols-1 gap-5">
@@ -187,7 +194,7 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
                                 </label>
                                 <GlassInput 
                                     type="number"
-                                    placeholder="Enter weekly goal"
+                                    placeholder="Weekly goal"
                                     value={weeklyTarget || ''}
                                     onChange={e => setWeeklyTarget(parseInt(e.target.value) || 0)}
                                     className="font-mono"
@@ -204,10 +211,10 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
                                 </label>
                                 <GlassInput 
                                     type="number"
-                                    placeholder="Enter store achievement for today"
+                                    placeholder="Achievement (₹)"
                                     value={achievement || ''}
                                     onChange={e => setAchievement(parseInt(e.target.value) || 0)}
-                                    className="border-green-200 dark:border-green-500/30 font-bold text-2xl font-mono text-green-700 dark:text-green-400"
+                                    className="border-green-200 dark:border-green-500/30 font-bold text-2xl font-mono text-green-700 dark:text-green-400 h-16"
                                 />
                             </div>
                         </div>
@@ -231,7 +238,7 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
 
                     <GlassCard className="p-5 space-y-4">
                         <div className="flex items-center justify-between mb-2">
-                            <h3 className="font-bold text-sm text-slate-500 uppercase tracking-widest">EOL (End of Life) Report</h3>
+                            <h3 className="font-bold text-sm text-slate-500 uppercase tracking-widest">EOL REPORT</h3>
                             <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded text-slate-400">Optional</span>
                         </div>
                         <div className="grid grid-cols-2 gap-4">

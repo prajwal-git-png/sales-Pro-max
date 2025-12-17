@@ -253,13 +253,19 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
           <div className="flex justify-between items-center gap-4">
              <div className="flex-1 space-y-1">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Date</label>
-                <input 
-                    type="date" 
-                    value={date} 
-                    onChange={e => setDate(e.target.value)}
-                    required
-                    className="w-full bg-slate-100 dark:bg-zinc-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/50 transition-all font-medium"
-                />
+                {/* Visual Overlay to force DD/MM/YYYY look */}
+                <div className="relative w-full h-10 bg-slate-100 dark:bg-zinc-800 rounded-xl px-3 flex items-center shadow-inner">
+                    <span className="font-medium text-sm text-slate-800 dark:text-zinc-200 pointer-events-none">
+                        {formatToDisplayDate(date)}
+                    </span>
+                    <input 
+                        type="date" 
+                        value={date} 
+                        onChange={e => setDate(e.target.value)}
+                        required
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    />
+                </div>
              </div>
              <div className="flex flex-col items-end space-y-2">
                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Status</span>
