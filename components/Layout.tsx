@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Home, PlusCircle, Users, Settings, Sun, Moon, Sparkles, Send, X, MessageCircle } from 'lucide-react';
 import { Tab, UserProfile, DailyReport } from '../types';
-import { createSalesCoachChat } from '../services/aiService';
+import { createSalesCoachChat, getOfflineResponse } from '../services/aiService';
 import { Modal } from './ui/GlassComponents';
 import { Chat } from '@google/genai';
 
@@ -59,16 +59,23 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
   // Chat Initialization
   useEffect(() => {
     if (showCoach && !chatSession && user) {
-        const chat = createSalesCoachChat(user, salesData);
-        setChatSession(chat);
-        setIsTyping(true);
-        
-        chat.sendMessage({ message: "Generate a short, friendly greeting and a one-sentence summary of my current month's performance. Ask me what product I want to know about." })
-            .then(res => {
-                if (res.text) setMessages([{ role: 'model', text: res.text }]);
-            })
-            .catch(() => setMessages([{ role: 'model', text: "Hi! I'm ready to help with your sales and product questions." }]))
-            .finally(() => setIsTyping(false));
+        try {
+            const chat = createSalesCoachChat(user, salesData);
+            setChatSession(chat);
+            setIsTyping(true);
+            
+            chat.sendMessage({ message: "Generate a short, friendly greeting." })
+                .then(res => {
+                    if (res.text) setMessages([{ role: 'model', text: res.text }]);
+                })
+                .catch(() => {
+                    // Silent fail on init, user will see offline mode on first message
+                    setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode Available)" }]);
+                })
+                .finally(() => setIsTyping(false));
+        } catch (e) {
+             setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode)" }]);
+        }
     }
   }, [showCoach, user, salesData]);
 
@@ -78,7 +85,8 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!inputMsg.trim() || !chatSession) return;
+    if (!inputMsg.trim()) return;
+    if (!user) return;
 
     const userText = inputMsg;
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
@@ -86,13 +94,28 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
     setIsTyping(true);
 
     try {
+        if (!chatSession) throw new Error("No session");
+        
         const result = await chatSession.sendMessage({ message: userText });
-        if (result.text) setMessages(prev => [...prev, { role: 'model', text: result.text }]);
+        if (result.text) {
+            setMessages(prev => [...prev, { role: 'model', text: result.text }]);
+        } else {
+            throw new Error("Empty response");
+        }
     } catch (err) {
-        setMessages(prev => [...prev, { role: 'model', text: "Connection error. Please try again." }]);
-    } finally {
-        setIsTyping(false);
+        // Fallback to Offline Logic if API fails
+        console.warn("API Error, using fallback:", err);
+        const offlineReply = getOfflineResponse(userText, user);
+        
+        // Add a small delay to simulate thinking in offline mode
+        setTimeout(() => {
+            setMessages(prev => [...prev, { role: 'model', text: offlineReply }]);
+            setIsTyping(false);
+        }, 600);
+        return; 
     }
+    
+    setIsTyping(false);
   };
 
 
@@ -234,7 +257,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
                     <input 
                         value={inputMsg}
                         onChange={e => setInputMsg(e.target.value)}
-                        placeholder="Ask about sales tips..."
+                        placeholder="Ask about products or tips..."
                         className="flex-1 bg-white dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-full px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20 shadow-sm transition-all"
                         disabled={isTyping}
                     />
