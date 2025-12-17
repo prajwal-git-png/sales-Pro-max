@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Send, Target, TrendingUp, Calendar, Copy, Check, ChevronLeft, ChevronRight, List, Calendar as CalendarIcon, Trash2, X, AlertCircle } from 'lucide-react';
+import { Send, Target, TrendingUp, Calendar, Copy, Check, ChevronLeft, ChevronRight, List, Calendar as CalendarIcon, Trash2, X, AlertCircle, Trophy, Wallet } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile, StoreEODEntry } from '../types';
 import { saveUser, getEODEntries, saveEODEntry, deleteEODEntry } from '../services/storageService';
@@ -70,9 +70,11 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
     const dailyTarget = Math.round(weeklyTarget / 7);
 
     // Weekly Cumulative Logic (Monday to Sunday)
+    // Resets every Monday automatically based on the targetDate passed
     const calculateWeeklyAch = (targetDate: string) => {
         const d = new Date(targetDate);
         const day = d.getDay(); // 0 (Sun) to 6 (Sat)
+        // Adjust for Monday start: Mon=0, Tue=1, ... Sun=6
         const diff = (day + 6) % 7; 
         
         const monday = new Date(d);
@@ -82,16 +84,17 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
         const mondayStr = monday.toISOString().split('T')[0];
         
         let total = eodHistory.reduce((acc, entry) => {
+            // Include only entries from this Monday onwards up to the target date
             if (entry.date >= mondayStr && entry.date <= targetDate) {
-                const isCurrentBeingEdited = entry.date === date;
-                // If the entry we are looking at in history is the SAME date we are editing,
-                // we prefer the live input value for the calculation.
-                return isCurrentBeingEdited ? acc : acc + entry.achievement;
+                // If the historical entry is the same day we are currently typing/editing, 
+                // we skip it to add the 'live' achievement value later.
+                if (entry.date === date) return acc;
+                return acc + entry.achievement;
             }
             return acc;
         }, 0);
 
-        // Always add the live achievement value for the currently selected date
+        // Add the current input achievement if we are looking at the current selection
         total += achievement;
 
         return total;
@@ -145,7 +148,6 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
         }
     };
 
-    // Calendar Days
     const calendarDays = useMemo(() => {
         const year = currentMonth.getFullYear();
         const month = currentMonth.getMonth();
@@ -162,18 +164,60 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
     }, [currentMonth]);
 
     const weekAch = useMemo(() => calculateWeeklyAch(date), [date, achievement, eodHistory]);
-    const dailyRemaining = Math.max(0, dailyTarget - achievement);
     const weeklyRemaining = Math.max(0, weeklyTarget - weekAch);
-    const progress = dailyTarget > 0 ? Math.min((achievement / dailyTarget) * 100, 100) : 0;
+    const weeklyProgress = weeklyTarget > 0 ? Math.min((weekAch / weeklyTarget) * 100, 100) : 0;
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
             <div className="text-center animate-reveal">
-                <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">Store EOD</h2>
-                <p className="text-slate-500 text-sm">Target vs Achievement Tracking</p>
+                <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Store Performance</h2>
+                <p className="text-slate-500 text-sm">Weekly Target Tracking</p>
             </div>
 
-            <div className="flex p-1 bg-white/40 dark:bg-white/10 rounded-xl backdrop-blur-sm w-fit mx-auto border border-white/20 animate-reveal" style={{ animationDelay: '100ms' }}>
+            {/* Weekly Summary Cards - Same Style as Dashboard */}
+            <div className="grid grid-cols-3 gap-2 animate-reveal" style={{ animationDelay: '100ms' }}>
+                <GlassCard className="p-3 flex flex-col items-center justify-center text-center bg-blue-50/50 dark:bg-blue-900/10 border-blue-100/50 dark:border-blue-500/20">
+                    <Target size={20} className="text-blue-500 mb-1" />
+                    <p className="text-[10px] uppercase text-slate-500 font-bold">Week Target</p>
+                    <p className="text-sm font-bold truncate w-full">
+                        <CountUp end={weeklyTarget} prefix="₹" />
+                    </p>
+                </GlassCard>
+                <GlassCard className="p-3 flex flex-col items-center justify-center text-center bg-green-50/50 dark:bg-green-900/10 border-green-100/50 dark:border-green-500/20">
+                    <Trophy size={20} className="text-green-500 mb-1" />
+                    <p className="text-[10px] uppercase text-slate-500 font-bold">Achieved</p>
+                    <p className="text-sm font-bold truncate w-full">
+                        <CountUp end={weekAch} prefix="₹" />
+                    </p>
+                </GlassCard>
+                <GlassCard className="p-3 flex flex-col items-center justify-center text-center bg-orange-50/50 dark:bg-orange-900/10 border-orange-100/50 dark:border-orange-500/20">
+                    <Wallet size={20} className="text-orange-500 mb-1" />
+                    <p className="text-[10px] uppercase text-slate-500 font-bold">Remaining</p>
+                    <p className="text-sm font-bold truncate w-full">
+                        <CountUp end={weeklyRemaining} prefix="₹" />
+                    </p>
+                </GlassCard>
+            </div>
+
+            {/* Progress Bar for Weekly Goal */}
+            <GlassCard className="p-4 animate-reveal" style={{ animationDelay: '150ms' }}>
+                <div className="flex justify-between text-[11px] font-bold uppercase text-slate-400 mb-2">
+                    <span className="flex items-center gap-1">Weekly Goal Progress</span>
+                    <span className={weeklyProgress >= 100 ? 'text-green-500' : ''}>
+                        <CountUp end={weeklyProgress} suffix="%" />
+                    </span>
+                </div>
+                <div className="h-3 w-full bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden p-0.5 shadow-inner">
+                    <div 
+                        className={`h-full rounded-full transition-all duration-1000 ease-out relative ${weeklyProgress >= 100 ? 'bg-gradient-to-r from-green-400 to-emerald-600' : 'bg-gradient-to-r from-indigo-500 to-blue-600'}`}
+                        style={{ width: `${weeklyProgress}%` }}
+                    >
+                        <div className="absolute inset-0 bg-white/20 animate-shine" />
+                    </div>
+                </div>
+            </GlassCard>
+
+            <div className="flex p-1 bg-white/40 dark:bg-white/10 rounded-xl backdrop-blur-sm w-fit mx-auto border border-white/20 animate-reveal" style={{ animationDelay: '200ms' }}>
                 <button 
                     onClick={() => setViewMode('entry')}
                     className={`px-6 py-2 rounded-lg text-sm font-bold transition-all duration-300 ${viewMode === 'entry' ? 'bg-black text-white shadow-lg scale-105' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 hover:bg-black/5'}`}
@@ -190,9 +234,9 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
 
             {viewMode === 'entry' ? (
                 <div className="space-y-6">
-                    <GlassCard className="p-5 space-y-5 shadow-xl animate-reveal" style={{ animationDelay: '200ms' }}>
+                    <GlassCard className="p-5 space-y-5 shadow-xl animate-reveal" style={{ animationDelay: '300ms' }}>
                         <div className="flex items-center gap-3 border-b border-gray-100 dark:border-white/10 pb-3 relative">
-                            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500 pointer-events-none group-hover:scale-110 transition-transform">
+                            <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500">
                                 <CalendarIcon size={20} />
                             </div>
                             <div className="flex-1 relative">
@@ -211,68 +255,35 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
 
                         <div className="grid grid-cols-1 gap-6">
                             <div className="space-y-2 group">
-                                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 group-focus-within:text-purple-500 transition-colors">
-                                    <Target size={14} className="text-purple-500 animate-pulse-slow" /> Weekly Target (₹)
+                                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                    <Target size={14} className="text-blue-500" /> Weekly Store Target (₹)
                                 </label>
                                 <GlassInput 
                                     type="number"
-                                    placeholder="Enter weekly goal"
+                                    placeholder="Set this week's goal"
                                     value={weeklyTarget || ''}
                                     onChange={e => setWeeklyTarget(parseInt(e.target.value) || 0)}
-                                    className="font-mono text-lg focus:scale-[1.01] transition-transform"
+                                    className="font-mono text-lg"
                                 />
-                                <div className="flex justify-between items-center px-1 animate-in fade-in slide-in-from-left-2 duration-500">
-                                    <p className="text-[10px] text-blue-500 font-bold">Daily: ₹{dailyTarget.toLocaleString()}</p>
-                                    {weeklyRemaining > 0 && (
-                                        <p className="text-[10px] text-orange-500 font-bold">Week Left: ₹{weeklyRemaining.toLocaleString()}</p>
-                                    )}
-                                </div>
+                                <p className="text-[10px] text-slate-400 italic">Target applies to Mon - Sun cycle</p>
                             </div>
 
                             <div className="space-y-2 group">
-                                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2 group-focus-within:text-green-500 transition-colors">
-                                    <TrendingUp size={14} className="text-green-500 animate-float" /> Today Achievement (₹)
+                                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                    <TrendingUp size={14} className="text-green-500" /> Today Achievement (₹)
                                 </label>
                                 <GlassInput 
                                     type="number"
-                                    placeholder="Amount (₹)"
+                                    placeholder="Enter today's total"
                                     value={achievement || ''}
                                     onChange={e => setAchievement(parseInt(e.target.value) || 0)}
-                                    className="border-green-200 dark:border-green-500/30 font-bold text-2xl font-mono text-green-700 dark:text-green-400 h-14 focus:scale-[1.02] transition-transform"
+                                    className="border-green-200 dark:border-green-500/30 font-bold text-2xl font-mono text-green-700 dark:text-green-400 h-14"
                                 />
-                                {dailyRemaining > 0 ? (
-                                    <div className="flex items-center gap-1.5 px-1 text-[10px] font-bold text-orange-500 animate-in fade-in duration-500">
-                                        <AlertCircle size={10} className="animate-pulse" />
-                                        <span>Remaining: ₹<CountUp end={dailyRemaining} /></span>
-                                    </div>
-                                ) : achievement > 0 && (
-                                    <div className="flex items-center gap-1.5 px-1 text-[10px] font-bold text-green-500 animate-in zoom-in duration-500">
-                                        <Check size={10} />
-                                        <span>Daily Target Achieved! 🚀</span>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="pt-2 px-1">
-                            <div className="flex justify-between text-[11px] font-bold uppercase text-slate-400 mb-2">
-                                <span className="flex items-center gap-1">Today's Progress</span>
-                                <span className={progress >= 100 ? 'text-green-500 font-black scale-110 transition-transform' : ''}>
-                                    <CountUp end={progress} suffix="%" />
-                                </span>
-                            </div>
-                            <div className="h-4 w-full bg-slate-100 dark:bg-zinc-800 rounded-full overflow-hidden p-0.5 border dark:border-white/5 shadow-inner">
-                                <div 
-                                    className={`h-full rounded-full transition-all duration-1000 ease-out relative ${progress >= 100 ? 'bg-gradient-to-r from-green-400 to-emerald-600' : 'bg-gradient-to-r from-blue-500 to-indigo-600'}`}
-                                    style={{ width: `${progress}%` }}
-                                >
-                                    <div className="absolute inset-0 bg-white/20 animate-shine" />
-                                </div>
                             </div>
                         </div>
                     </GlassCard>
 
-                    <GlassCard className="p-5 space-y-4 animate-reveal" style={{ animationDelay: '300ms' }}>
+                    <GlassCard className="p-5 space-y-4 animate-reveal" style={{ animationDelay: '400ms' }}>
                         <div className="flex items-center justify-between mb-2">
                             <h3 className="font-bold text-sm text-slate-500 uppercase tracking-widest">EOL REPORT</h3>
                             <span className="text-[10px] bg-zinc-100 dark:bg-zinc-800 px-2 py-0.5 rounded text-slate-400">Optional</span>
@@ -301,17 +312,17 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
                         </div>
                     </GlassCard>
 
-                    <GlassButton onClick={handleShare} className="w-full py-4 text-lg animate-reveal shadow-2xl" style={{ animationDelay: '400ms' }}>
-                        <Send size={20} className="group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" /> Generate & Share WhatsApp
+                    <GlassButton onClick={handleShare} className="w-full py-4 text-lg animate-reveal" style={{ animationDelay: '500ms' }}>
+                        <Send size={20} /> Generate & Share Report
                     </GlassButton>
                 </div>
             ) : (
-                <GlassCard className="p-4 space-y-6 animate-reveal overflow-hidden" style={{ animationDelay: '200ms' }}>
+                <GlassCard className="p-4 space-y-6 animate-reveal overflow-hidden" style={{ animationDelay: '300ms' }}>
                     <div className="flex items-center justify-between px-2">
                         <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()-1)))} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors">
                             <ChevronLeft size={20} />
                         </button>
-                        <h3 className="font-bold text-lg animate-in fade-in duration-300">
+                        <h3 className="font-bold text-lg">
                             {currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}
                         </h3>
                         <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()+1)))} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-white/10 transition-colors">
@@ -349,7 +360,7 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
                     </div>
 
                     <div className="space-y-3 pt-4 border-t border-gray-100 dark:border-white/5">
-                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Recent Records</h4>
+                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest px-1">Weekly History</h4>
                         <div className="space-y-3">
                             {eodHistory
                                 .filter(e => e.date.startsWith(currentMonth.toISOString().slice(0, 7)))
@@ -360,7 +371,7 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
                                         style={{ animationDelay: `${idx * 100}ms` }}
                                         className="flex justify-between items-center p-3 bg-white/40 dark:bg-white/5 rounded-xl border border-white/20 hover:border-blue-400/50 transition-all group animate-in slide-in-from-right-4 fade-in fill-mode-backwards"
                                     >
-                                        <div className="group-hover:translate-x-1 transition-transform">
+                                        <div>
                                             <p className="text-sm font-bold">{formatToDisplayDate(entry.date)}</p>
                                             <p className="text-[10px] text-slate-500">Achieved: ₹<CountUp end={entry.achievement} /></p>
                                         </div>
@@ -378,9 +389,6 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
                                     </div>
                                 ))
                             }
-                            {eodHistory.filter(e => e.date.startsWith(currentMonth.toISOString().slice(0, 7))).length === 0 && (
-                                <div className="text-center py-8 opacity-40 italic text-sm">No records for this month</div>
-                            )}
                         </div>
                     </div>
                 </GlassCard>
@@ -395,8 +403,8 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
                         </div>
                     </div>
                     <div>
-                        <p className="text-lg font-bold">Success!</p>
-                        <p className="text-sm text-slate-500 mt-1">EOD updated for {formatToDisplayDate(date)}.</p>
+                        <p className="text-lg font-bold">Entry Saved!</p>
+                        <p className="text-sm text-slate-500 mt-1">EOD totals for {formatToDisplayDate(date)} have been recorded.</p>
                     </div>
                     <GlassButton onClick={() => setShowSuccess(false)} variant="secondary" className="w-full border-green-200">
                         Continue
