@@ -24,6 +24,7 @@ export interface UserProfile {
   storeName: string;
   monthlyTarget: number;
   avatar?: string; // Base64
+  apiKey?: string; // User provided API Key
 }
 
 export interface Complaint {

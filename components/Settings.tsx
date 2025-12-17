@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { User, LogOut, FileText, Download, ExternalLink } from 'lucide-react';
+import { User, LogOut, FileText, Download, ExternalLink, Key } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton } from './ui/GlassComponents';
 import { UserProfile } from '../types';
 import { saveUser, logoutUser, getSales, compressImage } from '../services/storageService';
@@ -274,7 +274,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-500">
         {/* Profile Card */}
         <GlassCard className="p-6 text-center relative">
             <div className="relative inline-block">
@@ -296,16 +296,42 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
             </div>
             
             {isEditing ? (
-                <div className="space-y-3 text-left">
-                    <GlassInput value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="Name" />
-                    <GlassInput value={editForm.storeName} onChange={e => setEditForm({...editForm, storeName: e.target.value})} placeholder="Store" />
-                    <GlassInput value={editForm.employeeId} onChange={e => setEditForm({...editForm, employeeId: e.target.value})} placeholder="Emp ID" />
+                <div className="space-y-4 text-left">
+                    <div className="space-y-1">
+                        <label className="text-xs text-slate-500 font-bold ml-1">Full Name</label>
+                        <GlassInput value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} placeholder="Name" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs text-slate-500 font-bold ml-1">Store Name</label>
+                        <GlassInput value={editForm.storeName} onChange={e => setEditForm({...editForm, storeName: e.target.value})} placeholder="Store" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-xs text-slate-500 font-bold ml-1">Employee ID</label>
+                        <GlassInput value={editForm.employeeId} onChange={e => setEditForm({...editForm, employeeId: e.target.value})} placeholder="Emp ID" />
+                    </div>
                     <div className="flex gap-2 items-center">
-                        <label className="whitespace-nowrap text-sm text-slate-500 w-24">Target (₹)</label>
+                        <label className="whitespace-nowrap text-sm text-slate-500 w-24 font-bold">Target (₹)</label>
                         <GlassInput type="number" value={editForm.monthlyTarget} onChange={e => setEditForm({...editForm, monthlyTarget: parseInt(e.target.value) || 0})} />
                     </div>
+
+                    <div className="pt-2 border-t border-dashed border-gray-300 dark:border-white/10 mt-2">
+                         <div className="flex justify-between items-center mb-1">
+                            <label className="text-xs text-slate-500 font-bold ml-1 flex items-center gap-1"><Key size={12}/> Gemini API Key</label>
+                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 hover:underline flex items-center gap-1">
+                                Get Key <ExternalLink size={10} />
+                            </a>
+                         </div>
+                         <GlassInput 
+                            type="password"
+                            placeholder="Paste AIza... key here" 
+                            value={editForm.apiKey || ''} 
+                            onChange={e => setEditForm({...editForm, apiKey: e.target.value})} 
+                         />
+                         <p className="text-[10px] text-slate-400 mt-1 ml-1">Required for AI Coach & Quotes features.</p>
+                    </div>
+
                     <div className="flex gap-2 pt-2">
-                        <GlassButton onClick={handleSave} className="flex-1">Save</GlassButton>
+                        <GlassButton onClick={handleSave} className="flex-1">Save Changes</GlassButton>
                         <GlassButton onClick={() => { setIsEditing(false); setEditForm(user); }} variant="secondary" className="flex-1">Cancel</GlassButton>
                     </div>
                 </div>
@@ -314,7 +340,9 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                     <h2 className="text-xl font-bold">{user.name}</h2>
                     <p className="text-slate-500">{user.storeName}</p>
                     <p className="text-xs text-slate-400 mt-1">ID: {user.employeeId}</p>
-                    <button onClick={() => setIsEditing(true)} className="text-blue-500 text-sm mt-4 font-medium hover:underline">Edit Profile</button>
+                    <button onClick={() => setIsEditing(true)} className="text-blue-500 text-sm mt-4 font-medium hover:underline bg-blue-50 dark:bg-blue-900/20 px-4 py-1.5 rounded-full transition-colors">
+                        Edit Profile & API Key
+                    </button>
                 </>
             )}
         </GlassCard>
@@ -381,7 +409,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
             <LogOut size={18} /> Logout
         </GlassButton>
         
-        <p className="text-center text-xs text-slate-400 py-4">Version 5.1.0 • Built for Sales Executives</p>
+        <p className="text-center text-xs text-slate-400 py-4">Version 5.2.0 • Built for Sales Executives</p>
     </div>
   );
 };

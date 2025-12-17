@@ -1,73 +1,79 @@
 import { GoogleGenAI, Chat } from "@google/genai";
 import { UserProfile, DailyReport } from "../types";
+import { getUser } from "./storageService";
 
-// Robustly retrieve API key to prevent "process is not defined" crashes
-let apiKey = '';
-try {
-  // @ts-ignore
-  apiKey = process.env.API_KEY || '';
-} catch (e) {
-  console.warn("Environment variables not accessible");
-}
-
-// Lazy initialization of AI client
-let aiInstance: GoogleGenAI | null = null;
-
-const getAiClient = () => {
-    if (aiInstance) return aiInstance;
-    if (apiKey) {
-        try {
-            aiInstance = new GoogleGenAI({ apiKey });
-        } catch (error) {
-            console.error("Failed to initialize GoogleGenAI", error);
-        }
+// Helper to resolve key (User Setting > Env Var)
+const resolveApiKey = (user?: UserProfile | null): string => {
+    // 1. Try passed user object
+    if (user && user.apiKey && user.apiKey.trim().length > 10) return user.apiKey.trim();
+    
+    // 2. Try stored user object (if not passed)
+    const storedUser = getUser();
+    if (storedUser && storedUser.apiKey && storedUser.apiKey.trim().length > 10) return storedUser.apiKey.trim();
+    
+    // 3. Fallback to Env
+    try {
+        // @ts-ignore
+        const envKey = process.env.API_KEY || '';
+        if (envKey.length > 10) return envKey;
+    } catch {
+        // Ignore env access errors
     }
-    return aiInstance;
+    return '';
 };
 
 export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): Chat | null => {
-    const ai = getAiClient();
-    if (!ai) {
+    const key = resolveApiKey(user);
+    if (!key) {
         console.warn("AI Client not initialized (Missing Key)");
         return null;
     }
 
-    // Prepare context
-    const recentSales = sales
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 10);
-
-    const systemInstruction = `
-        You are an expert Bajaj Electricals Sales Coach. 
-        User: ${user.name} (${user.storeName}). Target: ${user.monthlyTarget}.
+    try {
+        const ai = new GoogleGenAI({ apiKey: key });
         
-        Task:
-        1. Analyze sales performance.
-        2. Answer technical questions about Bajaj products (Mixers, Geysers, Irons).
-        3. Provide sales closing tips.
+        // Prepare context
+        const recentSales = sales
+            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+            .slice(0, 10);
 
-        Rules:
-        - Plain text only. No Markdown (*, #, \`).
-        - Use Emojis for structure.
-        - Be concise.
-        
-        Context: ${JSON.stringify(recentSales)}
-    `;
+        const systemInstruction = `
+            You are an expert Bajaj Electricals Sales Coach. 
+            User: ${user.name} (${user.storeName}). Target: ${user.monthlyTarget}.
+            
+            Task:
+            1. Analyze sales performance.
+            2. Answer technical questions about Bajaj products (Mixers, Geysers, Irons).
+            3. Provide sales closing tips.
 
-    return ai.chats.create({
-        model: 'gemini-2.5-flash',
-        config: {
-            systemInstruction: systemInstruction,
-            maxOutputTokens: 300, 
-            thinkingConfig: { thinkingBudget: 0 }
-        }
-    });
+            Rules:
+            - Plain text only. No Markdown (*, #, \`).
+            - Use Emojis for structure.
+            - Be concise.
+            
+            Context: ${JSON.stringify(recentSales)}
+        `;
+
+        return ai.chats.create({
+            model: 'gemini-2.5-flash',
+            config: {
+                systemInstruction: systemInstruction,
+                maxOutputTokens: 300, 
+                thinkingConfig: { thinkingBudget: 0 }
+            }
+        });
+    } catch (e) {
+        console.error("Failed to create chat session", e);
+        return null;
+    }
 };
 
 export const getMotivationalQuote = async (): Promise<string> => {
     try {
-        const ai = getAiClient();
-        if (!ai) throw new Error("No API Key");
+        const key = resolveApiKey();
+        if (!key) throw new Error("No API Key");
+        
+        const ai = new GoogleGenAI({ apiKey: key });
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
