@@ -42,4 +42,4 @@ export interface Complaint {
   date: string;
 }
 
-export type Tab = 'dashboard' | 'entry' | 'crm' | 'settings';
+export type Tab = 'dashboard' | 'entry' | 'eod' | 'crm' | 'settings';

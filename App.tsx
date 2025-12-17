@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import NewEntry from './components/NewEntry';
+import EOD from './components/EOD';
 import CRM from './components/CRM';
 import Settings from './components/Settings';
 import { Tab, UserProfile, DailyReport } from './types';
@@ -16,7 +17,6 @@ const App = () => {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    // Initialize Theme
     const savedTheme = getTheme();
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
@@ -24,14 +24,11 @@ const App = () => {
       document.documentElement.classList.add('dark');
     }
 
-    // Load User & Data
     const storedUser = getUser();
     if (storedUser) {
       setUser(storedUser);
       setSalesData(getSales());
     }
-
-    // Fake Splash Screen
     setTimeout(() => setIsLoading(false), 1500);
   }, []);
 
@@ -65,9 +62,7 @@ const App = () => {
     );
   }
 
-  if (!user) {
-    return <Auth onLogin={handleLogin} />;
-  }
+  if (!user) return <Auth onLogin={handleLogin} />;
 
   return (
     <Layout 
@@ -80,6 +75,7 @@ const App = () => {
     >
       {activeTab === 'dashboard' && <Dashboard sales={salesData} user={user} onDataChange={refreshData} onUpdateUser={setUser} />}
       {activeTab === 'entry' && <NewEntry user={user} onEntryComplete={refreshData} />}
+      {activeTab === 'eod' && <EOD user={user} onUpdateUser={setUser} />}
       {activeTab === 'crm' && <CRM />}
       {activeTab === 'settings' && <Settings user={user} onUpdateUser={setUser} onLogout={handleLogout} />}
     </Layout>
