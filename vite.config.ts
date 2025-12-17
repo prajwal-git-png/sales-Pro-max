@@ -8,8 +8,14 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, (process as any).cwd(), '');
   
   // Vercel injects env vars into process.env, local dev uses .env via loadEnv
-  // Default to empty string if undefined to avoid build issues
-  const apiKey = process.env.API_KEY || env.API_KEY || '';
+  // Check multiple variations (API_KEY, GEMINI_API_KEY) and trim whitespace
+  const rawKey = process.env.API_KEY || env.API_KEY || 
+                 process.env.GEMINI_API_KEY || env.GEMINI_API_KEY || 
+                 process.env.VITE_API_KEY || env.VITE_API_KEY || 
+                 process.env.VITE_GEMINI_API_KEY || env.VITE_GEMINI_API_KEY || 
+                 '';
+                 
+  const apiKey = rawKey.trim();
 
   return {
     base: './', // Ensure relative paths for assets in preview/production
