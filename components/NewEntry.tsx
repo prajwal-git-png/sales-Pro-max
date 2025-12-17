@@ -78,10 +78,8 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
 
-  // Week Off Logic
   const [isWeekOff, setIsWeekOff] = useState(false);
 
-  // Search State
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -116,10 +114,8 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
       const qty = items[index].quantity || 1;
       
       if (mode === 'total') {
-          // User input is Total Price, so Unit Price = Total / Qty
           updateItem(index, 'price', value / qty);
       } else {
-          // User input is Unit Price
           updateItem(index, 'price', value);
       }
   };
@@ -128,8 +124,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
       const newModes = [...inputModes];
       newModes[index] = newModes[index] === 'unit' ? 'total' : 'unit';
       setInputModes(newModes);
-      
-      // Reset price to 0 to avoid confusion when switching modes
       updateItem(index, 'price', 0);
   };
 
@@ -248,14 +242,12 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Date & Status Card */}
         <GlassCard className="p-4">
           <div className="flex justify-between items-center gap-4">
              <div className="flex-1 space-y-1">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Date</label>
-                {/* Visual Overlay to force DD/MM/YYYY look */}
                 <div className="relative w-full h-10 bg-slate-100 dark:bg-zinc-800 rounded-xl px-3 flex items-center shadow-inner">
-                    <span className="font-medium text-sm text-slate-800 dark:text-zinc-200 pointer-events-none">
+                    <span className="font-bold text-sm text-slate-800 dark:text-zinc-200 pointer-events-none">
                         {formatToDisplayDate(date)}
                     </span>
                     <input 
@@ -307,7 +299,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                 )}
                 
                 <div className="p-5 space-y-4">
-                    {/* Product Name Search */}
                     <div className="space-y-1.5 relative z-20">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Product Model</label>
                         <div className="relative">
@@ -349,27 +340,16 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                                                 {p}
                                             </div>
                                         ))}
-                                        {searchTerm && !filteredProducts.includes(searchTerm) && (
-                                            <div 
-                                                className="px-4 py-3 text-sm text-blue-600 cursor-pointer font-bold bg-blue-50/50"
-                                                onClick={() => handleProductSelect(index, searchTerm)}
-                                            >
-                                                + Add "{searchTerm}"
-                                            </div>
-                                        )}
                                     </div>
                                 </div>
                             )}
-                            {/* Backdrop for search */}
                             {activeSearchIndex === index && (
                                 <div className="fixed inset-0 z-40 bg-black/5" onClick={() => setActiveSearchIndex(null)} />
                             )}
                         </div>
                     </div>
 
-                    {/* Qty & Price Row - Using Grid for alignment */}
                     <div className="grid grid-cols-2 gap-4">
-                        {/* Column 1: Quantity */}
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Quantity</label>
                             <input 
@@ -382,10 +362,9 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                             />
                         </div>
 
-                        {/* Column 2: Price (Unit or Total based on mode) */}
                         <div className="space-y-1.5 relative">
                              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
-                                {mode === 'total' ? 'Total Amount' : 'Unit Price'}
+                                {mode === 'total' ? 'Total Amt' : 'Unit Price'}
                             </label>
                             <div className="relative">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium z-10">₹</span>
@@ -405,7 +384,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                     </div>
                 </div>
 
-                {/* Footer Logic for Calculation Mode */}
                 <div className="bg-slate-50/50 dark:bg-black/30 border-t border-white/20 dark:border-white/5 p-3 flex justify-between items-center">
                     <div className="text-xs text-slate-500 dark:text-slate-400 font-medium px-2">
                         Total: <span className="text-slate-800 dark:text-white font-bold ml-1">₹{calculatedTotal.toLocaleString()}</span>
@@ -417,7 +395,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                         className="text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors shadow-sm"
                     >
                         <RefreshCcw size={10} className={mode === 'total' ? 'text-purple-500' : ''} />
-                        {mode === 'total' ? 'Input Unit Price' : 'Input Total Amount'}
+                        {mode === 'total' ? 'Unit Price' : 'Total Amount'}
                     </button>
                 </div>
 
@@ -426,13 +404,12 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
           </div>
           )}
 
-        {/* Bill Images Section - Hide if Week Off */}
         {!isWeekOff && (
         <GlassCard className="p-5">
             <div className="flex justify-between items-center mb-4">
                 <div>
                     <p className="font-bold text-slate-700 dark:text-slate-200">Bill Copies</p>
-                    <p className="text-xs text-slate-500">{billImages.length} images selected</p>
+                    <p className="text-xs text-slate-500">{billImages.length} selected</p>
                 </div>
                 <div className="flex gap-2">
                     <label className="cursor-pointer bg-slate-100 dark:bg-zinc-800 text-slate-600 dark:text-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 hover:bg-slate-200 dark:hover:bg-zinc-700 transition-colors">
@@ -459,9 +436,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                             >
                                 <X size={12} />
                             </button>
-                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/50 to-transparent p-2 rounded-b-xl">
-                                <span className="text-[10px] text-white font-bold opacity-80">#{idx + 1}</span>
-                            </div>
                         </div>
                     ))}
                 </div>
@@ -477,12 +451,11 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
         )}
 
         <GlassButton type="submit" className="w-full py-4 text-lg shadow-xl shadow-blue-500/20" disabled={isSubmitting}>
-            {isSubmitting ? 'Saving Entry...' : (isWeekOff ? 'Mark as Week Off' : 'Save Entry')}
+            {isSubmitting ? 'Saving...' : (isWeekOff ? 'Confirm Week Off' : 'Save Entry')}
         </GlassButton>
       </form>
     </div>
 
-    {/* Success Modal */}
     <Modal 
         isOpen={showSuccessModal} 
         onClose={resetForm} 
@@ -495,7 +468,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
             <p className="text-slate-600 dark:text-slate-300 font-medium">
                 {isWeekOff 
                     ? `Marked ${formattedDate} as Week Off.` 
-                    : `Your data has been added to the cumulative report for ${formattedDate}.`
+                    : `Data added to cumulative report for ${formattedDate}.`
                 }
             </p>
             
