@@ -130,6 +130,38 @@ export const updateComplaint = (updated: Complaint) => {
 export const getTheme = (): 'light' | 'dark' => (localStorage.getItem(KEYS.THEME) as 'light' | 'dark') || 'light';
 export const saveTheme = (theme: 'light' | 'dark') => localStorage.setItem(KEYS.THEME, theme);
 
+// --- Backup & Restore ---
+export const exportFullBackup = () => {
+  const backup = {
+    version: '5.2.0',
+    exportDate: new Date().toISOString(),
+    user: getJSON(KEYS.USER),
+    sales: getJSON(KEYS.SALES) || [],
+    eod: getJSON(KEYS.EOD) || [],
+    crm: getJSON(KEYS.CRM) || [],
+    theme: localStorage.getItem(KEYS.THEME) || 'light'
+  };
+  return JSON.stringify(backup, null, 2);
+};
+
+export const importFullBackup = (jsonString: string): boolean => {
+  try {
+    const data = JSON.parse(jsonString);
+    if (!data.user && !data.sales) throw new Error("Invalid backup format");
+
+    if (data.user) setJSON(KEYS.USER, data.user);
+    if (data.sales) setJSON(KEYS.SALES, data.sales);
+    if (data.eod) setJSON(KEYS.EOD, data.eod);
+    if (data.crm) setJSON(KEYS.CRM, data.crm);
+    if (data.theme) localStorage.setItem(KEYS.THEME, data.theme);
+    
+    return true;
+  } catch (e) {
+    console.error("Restore failed", e);
+    return false;
+  }
+};
+
 // --- Utils ---
 export const compressImage = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {

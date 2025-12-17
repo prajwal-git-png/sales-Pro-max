@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { User, LogOut, FileText, Download, ExternalLink, Key, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import { GlassCard, GlassInput, GlassButton } from './ui/GlassComponents';
+import React, { useState, useRef } from 'react';
+import { User, LogOut, FileText, Download, ExternalLink, Key, CheckCircle2, XCircle, Loader2, Upload, Database, RefreshCw, AlertTriangle } from 'lucide-react';
+import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile } from '../types';
-import { saveUser, logoutUser, getSales, compressImage } from '../services/storageService';
+import { saveUser, logoutUser, getSales, compressImage, exportFullBackup, importFullBackup } from '../services/storageService';
 import { downloadCSV, formatToDisplayDate } from '../services/reportService';
 import { validateApiKey } from '../services/aiService';
 
@@ -16,9 +16,12 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(user);
   const [backupMonth, setBackupMonth] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // API Key Validation State
   const [keyStatus, setKeyStatus] = useState<'idle' | 'valid' | 'invalid' | 'checking'>('idle');
+  const [showRestoreModal, setShowRestoreModal] = useState(false);
+  const [pendingBackupData, setPendingBackupData] = useState<string | null>(null);
 
   const handleSave = () => {
     saveUser(editForm);
@@ -47,33 +50,50 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
       setKeyStatus(isValid ? 'valid' : 'invalid');
   };
 
-  const exportJSON = () => {
-    const allSales = getSales();
-    let salesToExport = allSales;
-    
-    if (backupMonth) {
-        salesToExport = allSales.filter(s => s.date.startsWith(backupMonth));
-    }
-    
-    if (salesToExport.length === 0) {
-        alert("No data found for the selected month.");
-        return;
-    }
-
-    const data = JSON.stringify({ user, sales: salesToExport }, null, 2);
+  const triggerFullBackup = () => {
+    const data = exportFullBackup();
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `backup_${user.name.split(' ')[0]}_${backupMonth || 'all'}.json`;
+    a.download = `SalesTrack_FullBackup_${new Date().toISOString().split('T')[0]}.json`;
     a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRestoreClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setPendingBackupData(content);
+      setShowRestoreModal(true);
+      // Reset input
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  };
+
+  const confirmRestore = () => {
+    if (pendingBackupData && importFullBackup(pendingBackupData)) {
+      alert("Restore successful! Application will reload.");
+      window.location.reload();
+    } else {
+      alert("Invalid backup file. Please try a different file.");
+    }
+    setShowRestoreModal(false);
   };
 
   const handlePrintView = () => {
       const allSales = getSales();
       let salesToPrint = allSales;
 
-      // Filter by month if selected
       if (backupMonth) {
           salesToPrint = allSales.filter(s => s.date.startsWith(backupMonth));
       }
@@ -83,10 +103,8 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
           return;
       }
 
-      // Sort by date (Newest First)
       salesToPrint.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-      // Create a print-friendly window
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(`
@@ -95,115 +113,17 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                 <head>
                     <title>Sales Report - ${user.name}</title>
                     <style>
-                        body { 
-                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-                            padding: 40px; 
-                            color: #1e293b;
-                            background: white;
-                        }
-                        .header { 
-                            margin-bottom: 30px; 
-                            border-bottom: 3px solid #6366f1; 
-                            padding-bottom: 20px; 
-                        }
-                        .header h1 { 
-                            margin: 0 0 10px 0; 
-                            color: #1e1b4b; 
-                            font-size: 28px;
-                        }
-                        .meta { 
-                            display: grid; 
-                            grid-template-columns: repeat(2, 1fr); 
-                            gap: 15px; 
-                            font-size: 14px;
-                            color: #475569;
-                        }
-                        
-                        /* Table Styles */
-                        table { 
-                            width: 100%; 
-                            border-collapse: collapse; 
-                            margin-bottom: 30px; 
-                            font-size: 13px; 
-                        }
-                        th, td { 
-                            border: 1px solid #e2e8f0; 
-                            padding: 10px 12px; 
-                            text-align: left; 
-                        }
-                        th { 
-                            background-color: #f8fafc; 
-                            font-weight: 700; 
-                            color: #334155; 
-                            text-transform: uppercase;
-                            font-size: 12px;
-                            letter-spacing: 0.5px;
-                        }
+                        body { font-family: sans-serif; padding: 40px; color: #1e293b; background: white; }
+                        .header { margin-bottom: 30px; border-bottom: 3px solid #6366f1; padding-bottom: 20px; }
+                        .header h1 { margin: 0 0 10px 0; color: #1e1b4b; font-size: 28px; }
+                        .meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; font-size: 14px; color: #475569; }
+                        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; font-size: 13px; }
+                        th, td { border: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; }
+                        th { background-color: #f8fafc; font-weight: 700; color: #334155; text-transform: uppercase; font-size: 12px; }
                         tr:nth-child(even) { background-color: #f8fafc; }
-                        tr.week-off { background-color: #f1f5f9; color: #94a3b8; font-style: italic; }
-
-                        /* Bill Section Styles */
-                        .section-title {
-                            font-size: 20px;
-                            font-weight: bold;
-                            margin: 40px 0 20px 0;
-                            padding-bottom: 10px;
-                            border-bottom: 2px solid #e2e8f0;
-                            color: #334155;
-                            page-break-before: always;
-                        }
-                        .bill-entry { 
-                            margin-bottom: 40px; 
-                            page-break-inside: avoid; 
-                            border: 1px solid #e2e8f0; 
-                            border-radius: 12px; 
-                            padding: 20px; 
-                            background: #fdfdfd;
-                        }
-                        .bill-header { 
-                            font-weight: bold; 
-                            font-size: 16px; 
-                            margin-bottom: 15px; 
-                            padding-bottom: 10px; 
-                            border-bottom: 1px solid #f1f5f9; 
-                            display: flex; 
-                            justify-content: space-between; 
-                            color: #0f172a;
-                        }
-                        .bill-grid { 
-                            display: grid; 
-                            grid-template-columns: repeat(2, 1fr); 
-                            gap: 20px; 
-                        }
-                        .bill-img-container { 
-                            text-align: center; 
-                            background: white;
-                            padding: 10px;
-                            border: 1px solid #f1f5f9;
-                            border-radius: 8px;
-                            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-                        }
-                        .bill-img { 
-                            width: 100%; 
-                            height: auto; 
-                            max-height: 500px;
-                            object-fit: contain;
-                            border-radius: 4px; 
-                        }
-                        .bill-caption {
-                            font-size: 12px; 
-                            color: #64748b; 
-                            margin-top: 8px;
-                            font-weight: 500;
-                        }
-                        
-                        @media print {
-                            body { padding: 0; }
-                            .section-title { page-break-before: always; }
-                            .bill-grid { display: block; } /* Stack images in print for max size */
-                            .bill-img-container { margin-bottom: 20px; border: none; box-shadow: none; }
-                            .bill-img { max-height: 800px; }
-                        }
+                        .bill-entry { margin-bottom: 40px; page-break-inside: avoid; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; }
+                        .bill-img { width: 100%; max-width: 400px; height: auto; border-radius: 4px; }
+                        @media print { .bill-img { max-width: 100%; } }
                     </style>
                 </head>
                 <body>
@@ -212,78 +132,25 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                         <div class="meta">
                             <div><strong>Executive:</strong> ${user.name} (${user.employeeId})</div>
                             <div><strong>Store:</strong> ${user.storeName}</div>
-                            <div><strong>Period:</strong> ${backupMonth ? backupMonth : 'All Records'}</div>
-                            <div><strong>Generated:</strong> ${new Date().toLocaleDateString()}</div>
+                            <div><strong>Period:</strong> ${backupMonth || 'All Time'}</div>
                         </div>
                     </div>
-
-                    <h3>Performance Summary</h3>
                     <table>
                         <thead>
-                            <tr>
-                                <th>Date</th>
-                                <th>Items Sold</th>
-                                <th>Total Qty</th>
-                                <th>Total Value</th>
-                            </tr>
+                            <tr><th>Date</th><th>Products</th><th>Qty</th><th>Value</th></tr>
                         </thead>
                         <tbody>
-                            ${salesToPrint.map(s => {
-                                const displayDate = s.date.split('-').reverse().join('/');
-                                return `
-                                    <tr class="${s.isWeekOff ? 'week-off' : ''}">
-                                        <td style="white-space:nowrap">${displayDate}</td>
-                                        <td>
-                                            ${s.isWeekOff ? 'Week Off' : s.items.map(i => `<div style="margin-bottom:4px;">${i.productName} <span style="color:#64748b; font-size:0.9em">(${i.quantity} x ₹${i.price})</span></div>`).join('')}
-                                        </td>
-                                        <td>${s.totalQty}</td>
-                                        <td>₹${s.totalValue.toLocaleString()}</td>
-                                    </tr>
-                                `;
-                            }).join('')}
+                            ${salesToPrint.map(s => `
+                                <tr>
+                                    <td>${s.date.split('-').reverse().join('/')}</td>
+                                    <td>${s.isWeekOff ? 'Week Off' : s.items.map(i => `${i.productName} (${i.quantity}x₹${i.price})`).join('<br>')}</td>
+                                    <td>${s.totalQty}</td>
+                                    <td>₹${s.totalValue.toLocaleString()}</td>
+                                </tr>
+                            `).join('')}
                         </tbody>
-                        <tfoot>
-                             <tr style="font-weight:bold; background-color: #f1f5f9;">
-                                <td colspan="2" style="text-align:right; padding-right: 20px;">GRAND TOTAL</td>
-                                <td>${salesToPrint.reduce((acc, s) => acc + s.totalQty, 0)}</td>
-                                <td>₹${salesToPrint.reduce((acc, s) => acc + s.totalValue, 0).toLocaleString()}</td>
-                            </tr>
-                        </tfoot>
                     </table>
-
-                    ${salesToPrint.some(s => (s.billImages?.length || s.billImage)) ? `
-                        <div class="section-title">Bill Attachments</div>
-                        <div>
-                            ${salesToPrint.filter(s => (s.billImages?.length || s.billImage)).map(s => {
-                                const images = s.billImages || (s.billImage ? [s.billImage] : []);
-                                if (images.length === 0) return '';
-                                const displayDate = s.date.split('-').reverse().join('/');
-                                
-                                return `
-                                    <div class="bill-entry">
-                                        <div class="bill-header">
-                                            <span>📅 ${displayDate}</span>
-                                            <span>₹${s.totalValue.toLocaleString()}</span>
-                                        </div>
-                                        <div class="bill-grid">
-                                            ${images.map((img, idx) => `
-                                                <div class="bill-img-container">
-                                                    <img src="${img}" class="bill-img" alt="Bill" />
-                                                    <div class="bill-caption">Attachment ${idx + 1}</div>
-                                                </div>
-                                            `).join('')}
-                                        </div>
-                                    </div>
-                                `;
-                            }).join('')}
-                        </div>
-                    ` : ''}
-
-                    <script>
-                        window.onload = function() {
-                            setTimeout(() => window.print(), 800);
-                        }
-                    </script>
+                    <script>window.onload = () => { setTimeout(() => window.print(), 500); }</script>
                 </body>
             </html>
         `);
@@ -293,7 +160,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
-        {/* Profile Card */}
         <GlassCard className="p-6 text-center relative">
             <div className="relative inline-block">
                 <div className="w-24 h-24 rounded-full overflow-hidden mx-auto border-4 border-white/50 shadow-xl mb-4">
@@ -323,134 +189,134 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                         <label className="text-xs text-slate-500 font-bold ml-1">Store Name</label>
                         <GlassInput value={editForm.storeName} onChange={e => setEditForm({...editForm, storeName: e.target.value})} placeholder="Store" />
                     </div>
-                    <div className="space-y-1">
-                        <label className="text-xs text-slate-500 font-bold ml-1">Employee ID</label>
-                        <GlassInput value={editForm.employeeId} onChange={e => setEditForm({...editForm, employeeId: e.target.value})} placeholder="Emp ID" />
-                    </div>
                     <div className="flex gap-2 items-center">
                         <label className="whitespace-nowrap text-sm text-slate-500 w-24 font-bold">Target (₹)</label>
                         <GlassInput type="number" value={editForm.monthlyTarget} onChange={e => setEditForm({...editForm, monthlyTarget: parseInt(e.target.value) || 0})} />
                     </div>
-
                     <div className="pt-2 border-t border-dashed border-gray-300 dark:border-white/10 mt-2">
-                         <div className="flex justify-between items-center mb-1">
-                            <label className="text-xs text-slate-500 font-bold ml-1 flex items-center gap-1"><Key size={12}/> Gemini API Key</label>
-                            <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 hover:underline flex items-center gap-1">
-                                Get Key <ExternalLink size={10} />
-                            </a>
-                         </div>
+                         <label className="text-xs text-slate-500 font-bold ml-1 flex items-center gap-1"><Key size={12}/> Gemini API Key</label>
                          <div className="flex gap-2">
                              <GlassInput 
                                 type="password"
-                                placeholder="Paste AIza... key here" 
+                                placeholder="Paste API key" 
                                 value={editForm.apiKey || ''} 
-                                onChange={e => {
-                                    setEditForm({...editForm, apiKey: e.target.value});
-                                    setKeyStatus('idle');
-                                }} 
-                                className="flex-1"
+                                onChange={e => {setEditForm({...editForm, apiKey: e.target.value}); setKeyStatus('idle');}} 
                              />
-                             <button 
-                                onClick={handleTestKey}
-                                className={`px-3 rounded-xl border flex items-center justify-center transition-all ${
-                                    keyStatus === 'valid' ? 'bg-green-100 border-green-300 text-green-600' :
-                                    keyStatus === 'invalid' ? 'bg-red-100 border-red-300 text-red-600' :
-                                    'bg-white/40 border-white/30 text-slate-500 hover:bg-white/60'
-                                }`}
-                                disabled={keyStatus === 'checking'}
-                                title="Test API Key"
-                             >
-                                 {keyStatus === 'checking' ? <Loader2 size={18} className="animate-spin" /> : 
-                                  keyStatus === 'valid' ? <CheckCircle2 size={20} /> :
-                                  keyStatus === 'invalid' ? <XCircle size={20} /> :
-                                  <span className="text-xs font-bold">Test</span>}
+                             <button onClick={handleTestKey} className="px-3 rounded-xl border bg-white/40">
+                                {keyStatus === 'checking' ? <Loader2 size={18} className="animate-spin" /> : 'Test'}
                              </button>
                          </div>
-                         {keyStatus === 'invalid' && <p className="text-[10px] text-red-500 mt-1 ml-1 animate-pulse">Invalid Key. Check for spaces or typos.</p>}
-                         {keyStatus === 'valid' && <p className="text-[10px] text-green-500 mt-1 ml-1">Key is active! Don't forget to save.</p>}
-                         <p className="text-[10px] text-slate-400 mt-1 ml-1">Required for AI Coach & Quotes features.</p>
                     </div>
-
                     <div className="flex gap-2 pt-2">
                         <GlassButton onClick={handleSave} className="flex-1">Save Changes</GlassButton>
-                        <GlassButton onClick={() => { setIsEditing(false); setEditForm(user); setKeyStatus('idle'); }} variant="secondary" className="flex-1">Cancel</GlassButton>
+                        <GlassButton onClick={() => { setIsEditing(false); setEditForm(user); }} variant="secondary" className="flex-1">Cancel</GlassButton>
                     </div>
                 </div>
             ) : (
                 <>
                     <h2 className="text-xl font-bold">{user.name}</h2>
                     <p className="text-slate-500">{user.storeName}</p>
-                    <p className="text-xs text-slate-400 mt-1">ID: {user.employeeId}</p>
-                    <button onClick={() => setIsEditing(true)} className="text-blue-500 text-sm mt-4 font-medium hover:underline bg-blue-50 dark:bg-blue-900/20 px-4 py-1.5 rounded-full transition-colors">
-                        Edit Profile & API Key
+                    <button onClick={() => setIsEditing(true)} className="text-blue-500 text-sm mt-4 font-medium hover:underline bg-blue-50 dark:bg-blue-900/20 px-4 py-1.5 rounded-full">
+                        Edit Profile
                     </button>
                 </>
             )}
         </GlassCard>
 
-        {/* Data Management */}
-        <h3 className="font-bold text-lg px-2">Data & Reports</h3>
+        {/* Data Management - Unified Backup Section */}
+        <h3 className="font-bold text-lg px-2 flex items-center gap-2">
+            <Database size={18} className="text-indigo-500" /> System Backup
+        </h3>
         <GlassCard className="p-4 space-y-4">
-            <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Select Month (For Backup/Print)</label>
-                <input 
-                    type="month" 
-                    value={backupMonth}
-                    onChange={(e) => setBackupMonth(e.target.value)}
-                    className="w-full bg-slate-100 dark:bg-zinc-800 rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/20 dark:focus:ring-white/20 transition-all font-medium"
-                />
-            </div>
-
+            <p className="text-[11px] text-slate-500 font-medium px-1">
+                Save or restore your entire application state including all sales data and bill images.
+            </p>
+            
             <div className="grid grid-cols-2 gap-3">
                 <button 
-                    onClick={() => downloadCSV(getSales())} 
-                    className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 hover:bg-green-100 transition-colors"
+                    onClick={triggerFullBackup}
+                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 border border-indigo-200/50 hover:bg-indigo-100 transition-all shadow-sm"
                 >
-                    <FileText size={20} />
-                    <span className="text-xs font-bold">Export CSV</span>
+                    <Download size={22} />
+                    <span className="text-xs font-bold">Download Backup</span>
                 </button>
                 <button 
-                    onClick={handlePrintView}
-                    className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 hover:bg-red-100 transition-colors"
+                    onClick={handleRestoreClick}
+                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border border-amber-200/50 hover:bg-amber-100 transition-all shadow-sm"
                 >
-                    <Download size={20} />
-                    <span className="text-xs font-bold">Print/PDF</span>
+                    <Upload size={22} />
+                    <span className="text-xs font-bold">Restore Backup</span>
                 </button>
             </div>
             
-            <GlassButton onClick={exportJSON} className="w-full !py-2.5 !text-sm">
-                <Download size={16} /> {backupMonth ? `Backup ${backupMonth}` : 'Backup All Data'}
-            </GlassButton>
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                className="hidden" 
+                accept=".json" 
+                onChange={onFileChange} 
+            />
+
+            <div className="pt-4 border-t border-gray-100 dark:border-white/5">
+                <div className="flex items-center justify-between mb-3 px-1">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Export Report (Monthly)</label>
+                    <FileText size={14} className="text-slate-400" />
+                </div>
+                <div className="flex gap-2">
+                    <input 
+                        type="month" 
+                        value={backupMonth}
+                        onChange={(e) => setBackupMonth(e.target.value)}
+                        className="flex-1 bg-slate-100 dark:bg-zinc-800 rounded-xl px-3 py-2 text-sm outline-none"
+                    />
+                    <button 
+                        onClick={() => downloadCSV(getSales())} 
+                        className="px-4 bg-green-500 text-white rounded-xl text-xs font-bold"
+                    >
+                        CSV
+                    </button>
+                    <button 
+                        onClick={handlePrintView}
+                        className="px-4 bg-red-500 text-white rounded-xl text-xs font-bold"
+                    >
+                        PDF
+                    </button>
+                </div>
+            </div>
         </GlassCard>
 
-        {/* Support */}
-        <h3 className="font-bold text-lg px-2 mt-2">Support</h3>
-        <GlassCard className="divide-y divide-white/20">
-            <a href="https://wa.me/917039920000" target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 hover:bg-white/30 transition-colors">
-                <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-[#25D366] flex items-center justify-center text-white">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
-                    </div>
-                    <span className="font-medium">WhatsApp Support</span>
+        {/* Restore Confirmation Modal */}
+        <Modal 
+            isOpen={showRestoreModal} 
+            onClose={() => setShowRestoreModal(false)}
+            title="Confirm Restoration"
+        >
+            <div className="space-y-4 text-center">
+                <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/30 rounded-full flex items-center justify-center mx-auto text-amber-600">
+                    <AlertTriangle size={32} />
                 </div>
-                <ExternalLink size={16} className="text-slate-400" />
-            </a>
-            <a href="https://www.bajajelectricals.com/" target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 hover:bg-white/30 transition-colors">
-                 <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
-                    </div>
-                    <span className="font-medium">Bajaj Website</span>
+                <div className="space-y-2">
+                    <h4 className="font-bold text-lg">Overwrite current data?</h4>
+                    <p className="text-sm text-slate-500">
+                        Restoring from a backup will replace ALL your current records, profile settings, and images. This action cannot be undone.
+                    </p>
                 </div>
-                <ExternalLink size={16} className="text-slate-400" />
-            </a>
-        </GlassCard>
+                <div className="flex gap-3 pt-4">
+                    <GlassButton onClick={confirmRestore} className="flex-1 !bg-amber-600">
+                        Yes, Restore Everything
+                    </GlassButton>
+                    <GlassButton onClick={() => setShowRestoreModal(false)} variant="secondary" className="flex-1">
+                        Cancel
+                    </GlassButton>
+                </div>
+            </div>
+        </Modal>
 
-        <GlassButton variant="danger" onClick={onLogout} className="w-full flex items-center justify-center gap-2">
+        <GlassButton variant="danger" onClick={onLogout} className="w-full">
             <LogOut size={18} /> Logout
         </GlassButton>
         
-        <p className="text-center text-xs text-slate-400 py-4">Version 5.2.0 • Built for Sales Executives</p>
+        <p className="text-center text-xs text-slate-400 py-4">Version 5.3.0 • Unified Backup System</p>
     </div>
   );
 };
