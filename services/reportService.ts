@@ -73,6 +73,34 @@ export const generateTextReport = (user: UserProfile, report: DailyReport) => {
   return text;
 };
 
+export const generateStoreEODReport = (
+    user: UserProfile,
+    date: string,
+    dayTarget: number,
+    dayAch: number,
+    weekTarget: number,
+    weekAch: number,
+    eolTarget: number,
+    eolAch: number
+  ) => {
+    // Format date DD/MM/YYYY
+    const d = new Date(date);
+    const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`;
+    
+    // Get First Name
+    const firstName = user.name.split(' ')[0];
+
+    return `Date: ${dateStr}
+Name:${firstName}
+Brand:*BAJAJ* 
+Day Target:${dayTarget}
+Day achievement: ${dayAch}
+Week Target : ${weekTarget}
+Week achivement : ${weekAch}
+Eol  target :${String(eolTarget).padStart(2, '0')}
+Eol Achive :${String(eolAch).padStart(2, '0')}`;
+  };
+
 export const downloadCSV = (sales: DailyReport[]) => {
     const headers = ['Date', 'Product', 'Quantity', 'Unit Price', 'Total Value'];
     const rows: string[] = [];

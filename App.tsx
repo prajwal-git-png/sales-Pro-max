@@ -78,7 +78,7 @@ const App = () => {
       user={user}
       salesData={salesData}
     >
-      {activeTab === 'dashboard' && <Dashboard sales={salesData} user={user} onDataChange={refreshData} />}
+      {activeTab === 'dashboard' && <Dashboard sales={salesData} user={user} onDataChange={refreshData} onUpdateUser={setUser} />}
       {activeTab === 'entry' && <NewEntry user={user} onEntryComplete={refreshData} />}
       {activeTab === 'crm' && <CRM />}
       {activeTab === 'settings' && <Settings user={user} onUpdateUser={setUser} onLogout={handleLogout} />}

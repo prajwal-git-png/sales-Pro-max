@@ -25,6 +25,11 @@ export interface UserProfile {
   monthlyTarget: number;
   avatar?: string; // Base64
   apiKey?: string; // User provided API Key
+  customTargets?: {
+    daily: number;
+    weekly: number;
+    eol: number;
+  };
 }
 
 export interface Complaint {

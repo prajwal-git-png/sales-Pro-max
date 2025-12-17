@@ -1,15 +1,16 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Sparkles, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
+import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Sparkles, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Store, Send } from 'lucide-react';
 import { DailyReport, SaleItem, UserProfile } from '../types';
-import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
-import { generateTextReport } from '../services/reportService';
-import { deleteDailyReport, updateDailyReport } from '../services/storageService';
+import { GlassCard, GlassButton, GlassInput, Modal } from './ui/GlassComponents';
+import { generateTextReport, generateStoreEODReport } from '../services/reportService';
+import { deleteDailyReport, updateDailyReport, saveUser } from '../services/storageService';
 import { getMotivationalQuote } from '../services/aiService';
 
 interface DashboardProps {
   sales: DailyReport[];
   user: UserProfile;
   onDataChange: () => void;
+  onUpdateUser: (u: UserProfile) => void;
 }
 
 // Helper Component for Animated Numbers
@@ -40,12 +41,21 @@ const CountUp = ({ end, prefix = '', suffix = '', duration = 1500 }: { end: numb
     return <span>{prefix}{count.toLocaleString()}{suffix}</span>;
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange }) => {
+const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpdateUser }) => {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [selectedDateReport, setSelectedDateReport] = useState<DailyReport | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [quote, setQuote] = useState("Loading inspiration... ✨");
   
+  // Store EOD Modal State
+  const [showEODModal, setShowEODModal] = useState(false);
+  const [eodForm, setEodForm] = useState({
+      dayTarget: user.customTargets?.daily || 0,
+      weekTarget: user.customTargets?.weekly || 0,
+      eolTarget: user.customTargets?.eol || 0,
+      eolAchieve: 0
+  });
+
   // Calendar Navigation State
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
@@ -66,6 +76,16 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange }) => {
   useEffect(() => {
     getMotivationalQuote().then(setQuote);
   }, []);
+
+  // Update EOD defaults if user prefs change
+  useEffect(() => {
+    setEodForm(prev => ({
+        ...prev,
+        dayTarget: user.customTargets?.daily || prev.dayTarget,
+        weekTarget: user.customTargets?.weekly || prev.weekTarget,
+        eolTarget: user.customTargets?.eol || prev.eolTarget
+    }));
+  }, [user.customTargets]);
 
   // Stats Calculation based on currentMonth
   const { mtdValue, mtdPercentage, balance, monthName } = useMemo(() => {
@@ -141,6 +161,67 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange }) => {
           return true;
       }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [sales, viewMode, filters]);
+
+  // Store EOD Calculations
+  const getEODStats = () => {
+      const dateStr = selectedDateReport ? selectedDateReport.date : new Date().toISOString().split('T')[0];
+      
+      // Day Achievement
+      const dayAch = sales.find(s => s.date === dateStr)?.totalValue || 0;
+
+      // Week Achievement
+      const d = new Date(dateStr);
+      // Determine Monday of current week (assuming Mon start)
+      const day = d.getDay(); // 0-6
+      const diff = (day + 6) % 7; // days to subtract to get Monday
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - diff);
+      monday.setHours(0,0,0,0);
+      
+      const targetDate = new Date(dateStr);
+      targetDate.setHours(23,59,59,999);
+
+      const weekAch = sales.reduce((acc, s) => {
+          const sDate = new Date(s.date);
+          if (sDate >= monday && sDate <= targetDate) {
+              return acc + s.totalValue;
+          }
+          return acc;
+      }, 0);
+
+      return { dateStr, dayAch, weekAch };
+  };
+
+  const handleEODShare = () => {
+      const { dateStr, dayAch, weekAch } = getEODStats();
+      
+      // Save targets for persistence
+      const updatedUser = {
+          ...user,
+          customTargets: {
+              daily: eodForm.dayTarget,
+              weekly: eodForm.weekTarget,
+              eol: eodForm.eolTarget
+          }
+      };
+      saveUser(updatedUser);
+      onUpdateUser(updatedUser);
+
+      const reportText = generateStoreEODReport(
+          user, 
+          dateStr, 
+          eodForm.dayTarget, 
+          dayAch, 
+          eodForm.weekTarget, 
+          weekAch, 
+          eodForm.eolTarget, 
+          eodForm.eolAchieve
+      );
+
+      // Open WhatsApp
+      window.open(`https://wa.me/?text=${encodeURIComponent(reportText)}`, '_blank');
+      setShowEODModal(false);
+  };
 
   const handleDeleteEntry = (date: string) => {
     if (window.confirm('Are you sure you want to delete this report? This cannot be undone.')) {
@@ -304,6 +385,9 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange }) => {
       <div className="flex gap-2">
           <GlassButton onClick={handleCopyToday} className="flex-1 !py-3 bg-zinc-800 hover:bg-zinc-700 !text-sm">
              <Copy size={16} /> Copy Report
+          </GlassButton>
+          <GlassButton onClick={() => setShowEODModal(true)} className="flex-1 !py-3 bg-indigo-600 hover:bg-indigo-700 !text-sm !border-indigo-400/30 shadow-indigo-500/20">
+             <Store size={16} /> Store EOD
           </GlassButton>
       </div>
 
@@ -598,6 +682,73 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange }) => {
              </div>
           </div>
         )}
+      </Modal>
+      
+      {/* Store EOD Modal */}
+      <Modal 
+        isOpen={showEODModal} 
+        onClose={() => setShowEODModal(false)}
+        title="Store EOD Report"
+      >
+        <div className="space-y-4">
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl mb-4">
+                <p className="text-xs text-blue-600 dark:text-blue-300 font-semibold mb-1">Date: {getEODStats().dateStr}</p>
+                <p className="text-xs text-slate-500">Calculated stats are based on today's entries.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-500">Day Target</label>
+                    <GlassInput 
+                        type="number"
+                        value={eodForm.dayTarget}
+                        onChange={e => setEodForm({...eodForm, dayTarget: parseInt(e.target.value) || 0})}
+                    />
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-500">Day Achieved</label>
+                    <div className="px-3 py-3 rounded-xl bg-gray-100 dark:bg-white/5 border border-transparent font-bold text-slate-700 dark:text-slate-300">
+                        ₹{getEODStats().dayAch.toLocaleString()}
+                    </div>
+                </div>
+                
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-500">Week Target</label>
+                    <GlassInput 
+                        type="number"
+                        value={eodForm.weekTarget}
+                        onChange={e => setEodForm({...eodForm, weekTarget: parseInt(e.target.value) || 0})}
+                    />
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-500">Week Achieved</label>
+                    <div className="px-3 py-3 rounded-xl bg-gray-100 dark:bg-white/5 border border-transparent font-bold text-slate-700 dark:text-slate-300">
+                        ₹{getEODStats().weekAch.toLocaleString()}
+                    </div>
+                </div>
+
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-500">EOL Target</label>
+                    <GlassInput 
+                        type="number"
+                        value={eodForm.eolTarget}
+                        onChange={e => setEodForm({...eodForm, eolTarget: parseInt(e.target.value) || 0})}
+                    />
+                </div>
+                <div className="space-y-1">
+                    <label className="text-[10px] font-bold uppercase text-slate-500">EOL Achieved</label>
+                    <GlassInput 
+                        type="number"
+                        value={eodForm.eolAchieve}
+                        onChange={e => setEodForm({...eodForm, eolAchieve: parseInt(e.target.value) || 0})}
+                    />
+                </div>
+            </div>
+
+            <GlassButton onClick={handleEODShare} className="w-full mt-4 flex items-center justify-center gap-2">
+                <Send size={18} /> Share to WhatsApp
+            </GlassButton>
+        </div>
       </Modal>
 
       {/* Image Zoom Modal */}
