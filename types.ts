@@ -16,6 +16,15 @@ export interface DailyReport {
   isWeekOff?: boolean;
 }
 
+export interface StoreEODEntry {
+  date: string;
+  achievement: number;
+  eolAchieve: number;
+  dayTarget: number;
+  weekTarget: number;
+  eolTarget: number;
+}
+
 export interface UserProfile {
   name: string;
   employeeId: string;

@@ -1,8 +1,9 @@
-import { DailyReport, UserProfile, Complaint, SaleItem } from '../types';
+import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry } from '../types';
 
 const KEYS = {
   USER: 'app_user_profile',
   SALES: 'app_sales_data',
+  EOD: 'app_eod_data',
   CRM: 'app_crm_data',
   THEME: 'app_theme_mode',
 };
@@ -34,7 +35,7 @@ export const logoutUser = () => {
     localStorage.removeItem(KEYS.USER);
 };
 
-// --- Sales ---
+// --- Sales (Detailed Brand Sales) ---
 export const getSales = (): DailyReport[] => getJSON<DailyReport[]>(KEYS.SALES) || [];
 
 export const saveSaleEntry = (date: string, newItems: SaleItem[], newBillImages: string[] = []) => {
@@ -47,12 +48,9 @@ export const saveSaleEntry = (date: string, newItems: SaleItem[], newBillImages:
   });
 
   if (existingIndex > -1) {
-    // Cumulative Logic: Append items
     const existing = sales[existingIndex];
     const updatedItems = [...existing.items, ...newItems];
     const { totalQty, totalValue } = calculateTotals(updatedItems);
-    
-    // Merge images: Handle legacy 'billImage' and new 'billImages'
     const existingImages = existing.billImages || (existing.billImage ? [existing.billImage] : []);
     const mergedImages = [...existingImages, ...newBillImages];
 
@@ -62,10 +60,9 @@ export const saveSaleEntry = (date: string, newItems: SaleItem[], newBillImages:
       totalQty,
       totalValue,
       billImages: mergedImages,
-      billImage: undefined, // Clear legacy field
+      billImage: undefined,
     };
   } else {
-    // New Entry
     const { totalQty, totalValue } = calculateTotals(newItems);
     sales.push({
       date,
@@ -93,11 +90,31 @@ export const deleteDailyReport = (date: string) => {
     setJSON(KEYS.SALES, filtered);
 };
 
+// --- Store EOD (Manual Store Achievement) ---
+export const getEODEntries = (): StoreEODEntry[] => getJSON<StoreEODEntry[]>(KEYS.EOD) || [];
+
+export const saveEODEntry = (entry: StoreEODEntry) => {
+    const entries = getEODEntries();
+    const index = entries.findIndex(e => e.date === entry.date);
+    if (index > -1) {
+        entries[index] = entry;
+    } else {
+        entries.push(entry);
+    }
+    setJSON(KEYS.EOD, entries);
+};
+
+export const deleteEODEntry = (date: string) => {
+    const entries = getEODEntries();
+    const filtered = entries.filter(e => e.date !== date);
+    setJSON(KEYS.EOD, filtered);
+};
+
 // --- CRM ---
 export const getComplaints = (): Complaint[] => getJSON<Complaint[]>(KEYS.CRM) || [];
 export const saveComplaint = (complaint: Complaint) => {
   const list = getComplaints();
-  list.unshift(complaint); // Add to top
+  list.unshift(complaint);
   setJSON(KEYS.CRM, list);
 };
 export const updateComplaint = (updated: Complaint) => {
@@ -123,16 +140,13 @@ export const compressImage = (file: File): Promise<string> => {
             img.src = event.target?.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                // Max width 1024 to save space
                 const scale = 1024 / img.width;
                 const width = scale < 1 ? 1024 : img.width;
                 const height = scale < 1 ? img.height * scale : img.height;
-                
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 ctx?.drawImage(img, 0, 0, width, height);
-                // JPEG quality 0.7
                 resolve(canvas.toDataURL('image/jpeg', 0.7));
             };
         };
