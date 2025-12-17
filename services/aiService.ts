@@ -22,6 +22,22 @@ const resolveApiKey = (user?: UserProfile | null): string => {
     return '';
 };
 
+export const validateApiKey = async (apiKey: string): Promise<boolean> => {
+    try {
+        const ai = new GoogleGenAI({ apiKey });
+        // Simple fast call to check validity
+        await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: 'ping',
+            config: { maxOutputTokens: 1 }
+        });
+        return true;
+    } catch (e) {
+        console.error("API Key Validation Failed:", e);
+        return false;
+    }
+};
+
 export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): Chat | null => {
     const key = resolveApiKey(user);
     if (!key) {

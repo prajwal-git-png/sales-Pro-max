@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { User, LogOut, FileText, Download, ExternalLink, Key } from 'lucide-react';
+import { User, LogOut, FileText, Download, ExternalLink, Key, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton } from './ui/GlassComponents';
 import { UserProfile } from '../types';
 import { saveUser, logoutUser, getSales, compressImage } from '../services/storageService';
 import { downloadCSV } from '../services/reportService';
+import { validateApiKey } from '../services/aiService';
 
 interface SettingsProps {
   user: UserProfile;
@@ -15,6 +16,9 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState(user);
   const [backupMonth, setBackupMonth] = useState('');
+  
+  // API Key Validation State
+  const [keyStatus, setKeyStatus] = useState<'idle' | 'valid' | 'invalid' | 'checking'>('idle');
 
   const handleSave = () => {
     saveUser(editForm);
@@ -31,6 +35,16 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
               alert('Image too large');
           }
       }
+  };
+
+  const handleTestKey = async () => {
+      if (!editForm.apiKey || editForm.apiKey.trim().length < 10) {
+          setKeyStatus('invalid');
+          return;
+      }
+      setKeyStatus('checking');
+      const isValid = await validateApiKey(editForm.apiKey.trim());
+      setKeyStatus(isValid ? 'valid' : 'invalid');
   };
 
   const exportJSON = () => {
@@ -321,18 +335,41 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                                 Get Key <ExternalLink size={10} />
                             </a>
                          </div>
-                         <GlassInput 
-                            type="password"
-                            placeholder="Paste AIza... key here" 
-                            value={editForm.apiKey || ''} 
-                            onChange={e => setEditForm({...editForm, apiKey: e.target.value})} 
-                         />
+                         <div className="flex gap-2">
+                             <GlassInput 
+                                type="password"
+                                placeholder="Paste AIza... key here" 
+                                value={editForm.apiKey || ''} 
+                                onChange={e => {
+                                    setEditForm({...editForm, apiKey: e.target.value});
+                                    setKeyStatus('idle');
+                                }} 
+                                className="flex-1"
+                             />
+                             <button 
+                                onClick={handleTestKey}
+                                className={`px-3 rounded-xl border flex items-center justify-center transition-all ${
+                                    keyStatus === 'valid' ? 'bg-green-100 border-green-300 text-green-600' :
+                                    keyStatus === 'invalid' ? 'bg-red-100 border-red-300 text-red-600' :
+                                    'bg-white/40 border-white/30 text-slate-500 hover:bg-white/60'
+                                }`}
+                                disabled={keyStatus === 'checking'}
+                                title="Test API Key"
+                             >
+                                 {keyStatus === 'checking' ? <Loader2 size={18} className="animate-spin" /> : 
+                                  keyStatus === 'valid' ? <CheckCircle2 size={20} /> :
+                                  keyStatus === 'invalid' ? <XCircle size={20} /> :
+                                  <span className="text-xs font-bold">Test</span>}
+                             </button>
+                         </div>
+                         {keyStatus === 'invalid' && <p className="text-[10px] text-red-500 mt-1 ml-1 animate-pulse">Invalid Key. Check for spaces or typos.</p>}
+                         {keyStatus === 'valid' && <p className="text-[10px] text-green-500 mt-1 ml-1">Key is active! Don't forget to save.</p>}
                          <p className="text-[10px] text-slate-400 mt-1 ml-1">Required for AI Coach & Quotes features.</p>
                     </div>
 
                     <div className="flex gap-2 pt-2">
                         <GlassButton onClick={handleSave} className="flex-1">Save Changes</GlassButton>
-                        <GlassButton onClick={() => { setIsEditing(false); setEditForm(user); }} variant="secondary" className="flex-1">Cancel</GlassButton>
+                        <GlassButton onClick={() => { setIsEditing(false); setEditForm(user); setKeyStatus('idle'); }} variant="secondary" className="flex-1">Cancel</GlassButton>
                     </div>
                 </div>
             ) : (
@@ -397,7 +434,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
             <a href="https://www.bajajelectricals.com/" target="_blank" rel="noreferrer" className="flex items-center justify-between p-4 hover:bg-white/30 transition-colors">
                  <div className="flex items-center gap-3">
                     <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
                     </div>
                     <span className="font-medium">Bajaj Website</span>
                 </div>

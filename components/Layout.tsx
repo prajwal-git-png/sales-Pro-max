@@ -56,6 +56,12 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
       if (!isDragging) setShowCoach(true);
   };
 
+  // Reset Chat if API Key changes
+  useEffect(() => {
+    setChatSession(null);
+    setMessages([]);
+  }, [user?.apiKey]);
+
   // Chat Initialization
   useEffect(() => {
     if (showCoach && !chatSession && user) {
@@ -69,17 +75,17 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
                         if (res.text) setMessages([{ role: 'model', text: res.text }]);
                     })
                     .catch(() => {
-                        setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode Available)" }]);
+                        setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode Available - Check API Key)" }]);
                     })
                     .finally(() => setIsTyping(false));
             } else {
-                 setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode)" }]);
+                 setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode - No API Key Found)" }]);
             }
         } catch (e) {
              setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode)" }]);
         }
     }
-  }, [showCoach, user, salesData]);
+  }, [showCoach, user, salesData, chatSession]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -104,14 +110,23 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
         } else {
             throw new Error("Empty response");
         }
-    } catch (err) {
+    } catch (err: any) {
         // Fallback to Offline Logic if API fails
         console.warn("API Error, using fallback:", err);
+        let errorHint = "";
+        
+        if (err.message?.includes('403') || err.message?.includes('API key')) {
+             errorHint = "⚠️ Invalid API Key. Please check Settings.";
+        } else if (err.message?.includes('429')) {
+             errorHint = "⚠️ Quota Exceeded. Using offline mode.";
+        }
+        
         const offlineReply = getOfflineResponse(userText, user);
         
         // Add a small delay to simulate thinking in offline mode
         setTimeout(() => {
-            setMessages(prev => [...prev, { role: 'model', text: offlineReply }]);
+            const reply = errorHint ? `${errorHint}\n\n${offlineReply}` : offlineReply;
+            setMessages(prev => [...prev, { role: 'model', text: reply }]);
             setIsTyping(false);
         }, 600);
         return; 
