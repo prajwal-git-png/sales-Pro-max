@@ -3,6 +3,7 @@ import { User, Phone, CheckCircle, XCircle } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton } from './ui/GlassComponents';
 import { Complaint } from '../types';
 import { getComplaints, saveComplaint, updateComplaint } from '../services/storageService';
+import { formatToDisplayDate } from '../services/reportService';
 
 const CRM: React.FC = () => {
   const [complaints, setComplaints] = useState<Complaint[]>(getComplaints());
@@ -104,7 +105,7 @@ const CRM: React.FC = () => {
                                    <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${c.issueType === 'Installation' ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-300' : 'bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-300'}`}>
                                        {c.issueType}
                                    </span>
-                                   <span className="text-xs text-slate-400">{new Date(c.date).toLocaleDateString()}</span>
+                                   <span className="text-xs text-slate-400">{formatToDisplayDate(c.date)}</span>
                                </div>
                                <h4 className="font-bold text-lg">{c.customerName}</h4>
                                <p className="text-sm text-slate-500">{c.productModel}</p>

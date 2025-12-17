@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Sparkles, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Store, Send } from 'lucide-react';
 import { DailyReport, SaleItem, UserProfile } from '../types';
 import { GlassCard, GlassButton, GlassInput, Modal } from './ui/GlassComponents';
-import { generateTextReport, generateStoreEODReport } from '../services/reportService';
+import { generateTextReport, generateStoreEODReport, formatToDisplayDate } from '../services/reportService';
 import { deleteDailyReport, updateDailyReport, saveUser } from '../services/storageService';
 import { getMotivationalQuote } from '../services/aiService';
 
@@ -526,8 +526,8 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
              >
                 <div className="flex justify-between items-center">
                     <div>
-                        <p className="font-bold flex items-center gap-2">
-                            {new Date(report.date).toLocaleDateString()}
+                        <p className="font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">
+                            {formatToDisplayDate(report.date)}
                             {report.isWeekOff && <span className="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full">OFF</span>}
                         </p>
                         <p className="text-sm text-slate-500">
@@ -553,7 +553,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
       <Modal 
         isOpen={!!selectedDateReport} 
         onClose={() => { setSelectedDateReport(null); cancelEdit(); }}
-        title={selectedDateReport ? new Date(selectedDateReport.date).toDateString() : ''}
+        title={selectedDateReport ? formatToDisplayDate(selectedDateReport.date) : ''}
       >
         {selectedDateReport && (
           <div className="space-y-6 pb-4">
@@ -578,7 +578,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
 
                 {/* Items List */}
                 <div className="space-y-3">
-                    <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider sticky top-0 bg-white/95 dark:bg-black/95 backdrop-blur py-2 z-10">Items Sold</h4>
+                    <h4 className="text-sm font-semibold text-slate-500 uppercase tracking-wider sticky top-0 bg-white/95 dark:bg-zinc-900 backdrop-blur py-2 z-10">Items Sold</h4>
                     {selectedDateReport.items.map((item, idx) => {
                         const isEditing = editingItemIndex === idx;
 
@@ -641,16 +641,16 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
                 {/* Bill Images */}
                 {getReportImages(selectedDateReport).length > 0 && (
                     <div className="mt-4">
-                        <h4 className="text-sm font-semibold text-slate-500 mb-2 sticky top-0 bg-white/95 dark:bg-black/95 backdrop-blur py-2 z-10">Bill Copies ({getReportImages(selectedDateReport).length})</h4>
+                        <h4 className="text-sm font-semibold text-slate-500 mb-2 sticky top-0 bg-white/95 dark:bg-zinc-900 backdrop-blur py-2 z-10">Bill Copies ({getReportImages(selectedDateReport).length})</h4>
                         <div className="grid grid-cols-2 gap-3">
                             {getReportImages(selectedDateReport).map((img, idx) => (
-                                <div key={idx} className="relative group rounded-xl overflow-hidden border border-white/20 aspect-square">
+                                <div key={idx} className="report-img-inner-shadow relative group rounded-xl overflow-hidden border border-white/20 aspect-square shadow-lg">
                                     <img 
                                         src={img} 
                                         alt="Bill" 
                                         className="w-full h-full object-cover"
                                     />
-                                    <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2">
+                                    <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity gap-2 z-10">
                                         <div className="flex gap-2">
                                             <button onClick={() => setZoomedImage(img)} className="p-2 bg-white rounded-full text-black hover:bg-gray-100">
                                                 <Maximize2 size={16} />
@@ -692,7 +692,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
       >
         <div className="space-y-4">
             <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-xl mb-4">
-                <p className="text-xs text-blue-600 dark:text-blue-300 font-semibold mb-1">Date: {getEODStats().dateStr}</p>
+                <p className="text-xs text-blue-600 dark:text-blue-300 font-semibold mb-1">Date: {formatToDisplayDate(getEODStats().dateStr)}</p>
                 <p className="text-xs text-slate-500">Calculated stats are based on today's entries.</p>
             </div>
 

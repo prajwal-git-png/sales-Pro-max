@@ -3,7 +3,7 @@ import { User, LogOut, FileText, Download, ExternalLink, Key, CheckCircle2, XCir
 import { GlassCard, GlassInput, GlassButton } from './ui/GlassComponents';
 import { UserProfile } from '../types';
 import { saveUser, logoutUser, getSales, compressImage } from '../services/storageService';
-import { downloadCSV } from '../services/reportService';
+import { downloadCSV, formatToDisplayDate } from '../services/reportService';
 import { validateApiKey } from '../services/aiService';
 
 interface SettingsProps {
@@ -228,16 +228,19 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                             </tr>
                         </thead>
                         <tbody>
-                            ${salesToPrint.map(s => `
-                                <tr class="${s.isWeekOff ? 'week-off' : ''}">
-                                    <td style="white-space:nowrap">${s.date}</td>
-                                    <td>
-                                        ${s.isWeekOff ? 'Week Off' : s.items.map(i => `<div style="margin-bottom:4px;">${i.productName} <span style="color:#64748b; font-size:0.9em">(${i.quantity} x ₹${i.price})</span></div>`).join('')}
-                                    </td>
-                                    <td>${s.totalQty}</td>
-                                    <td>₹${s.totalValue.toLocaleString()}</td>
-                                </tr>
-                            `).join('')}
+                            ${salesToPrint.map(s => {
+                                const displayDate = s.date.split('-').reverse().join('/');
+                                return `
+                                    <tr class="${s.isWeekOff ? 'week-off' : ''}">
+                                        <td style="white-space:nowrap">${displayDate}</td>
+                                        <td>
+                                            ${s.isWeekOff ? 'Week Off' : s.items.map(i => `<div style="margin-bottom:4px;">${i.productName} <span style="color:#64748b; font-size:0.9em">(${i.quantity} x ₹${i.price})</span></div>`).join('')}
+                                        </td>
+                                        <td>${s.totalQty}</td>
+                                        <td>₹${s.totalValue.toLocaleString()}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
                         </tbody>
                         <tfoot>
                              <tr style="font-weight:bold; background-color: #f1f5f9;">
@@ -254,11 +257,12 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                             ${salesToPrint.filter(s => (s.billImages?.length || s.billImage)).map(s => {
                                 const images = s.billImages || (s.billImage ? [s.billImage] : []);
                                 if (images.length === 0) return '';
+                                const displayDate = s.date.split('-').reverse().join('/');
                                 
                                 return `
                                     <div class="bill-entry">
                                         <div class="bill-header">
-                                            <span>📅 ${s.date}</span>
+                                            <span>📅 ${displayDate}</span>
                                             <span>₹${s.totalValue.toLocaleString()}</span>
                                         </div>
                                         <div class="bill-grid">

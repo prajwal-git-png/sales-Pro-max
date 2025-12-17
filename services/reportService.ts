@@ -1,6 +1,15 @@
 import { DailyReport, UserProfile, SaleItem } from "../types";
 import { getSales } from "./storageService";
 
+export const formatToDisplayDate = (dateStr: string) => {
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 export const generateTextReport = (user: UserProfile, report: DailyReport) => {
   const allSales = getSales();
   
@@ -15,12 +24,8 @@ export const generateTextReport = (user: UserProfile, report: DailyReport) => {
     })
     .reduce((sum, s) => sum + s.totalValue, 0);
 
-  // Format date DD/MM/YY
-  const dateObj = new Date(report.date);
-  const day = String(dateObj.getDate()).padStart(2, '0');
-  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
-  const year = String(dateObj.getFullYear()).slice(-2);
-  const dateStr = `${day}/${month}/${year}`;
+  // Format date DD/MM/YYYY
+  const dateStr = formatToDisplayDate(report.date);
 
   let text = `Name:${user.name}\n`;
   text += `Date: ${dateStr}\n`;
@@ -84,8 +89,7 @@ export const generateStoreEODReport = (
     eolAch: number
   ) => {
     // Format date DD/MM/YYYY
-    const d = new Date(date);
-    const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth()+1).padStart(2, '0')}/${d.getFullYear()}`;
+    const dateStr = formatToDisplayDate(date);
     
     // Get First Name
     const firstName = user.name.split(' ')[0];

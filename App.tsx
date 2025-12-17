@@ -29,7 +29,8 @@ const App = () => {
       setUser(storedUser);
       setSalesData(getSales());
     }
-    setTimeout(() => setIsLoading(false), 1500);
+    // Sophisticated splash timeout - slightly longer for aesthetic reveal
+    setTimeout(() => setIsLoading(false), 2600);
   }, []);
 
   const toggleTheme = () => {
@@ -55,9 +56,49 @@ const App = () => {
 
   if (isLoading) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-white dark:bg-black transition-colors">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-500 to-purple-500 animate-pulse mb-4 shadow-2xl shadow-blue-500/50"></div>
-        <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-purple-600">SalesTrack</h1>
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-white dark:bg-black transition-colors duration-1000 overflow-hidden">
+        {/* Animated background blobs */}
+        <div className="absolute top-[-15%] left-[-10%] w-[110vw] h-[110vw] bg-indigo-500/10 rounded-full blur-[140px] animate-float opacity-40" />
+        <div className="absolute bottom-[-15%] right-[-10%] w-[90vw] h-[90vw] bg-purple-500/10 rounded-full blur-[140px] animate-float opacity-40" style={{ animationDelay: '-3s' }} />
+
+        <div className="relative z-10 flex flex-col items-center gap-12 animate-reveal">
+          {/* iOS Style Minimalist Icon */}
+          <div className="relative w-28 h-28">
+            <div className="absolute inset-0 bg-black/10 dark:bg-white/10 blur-2xl scale-110 rounded-full" />
+            <div className="relative h-full w-full bg-black dark:bg-white rounded-[24%] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex items-center justify-center">
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="w-12 h-12 text-white dark:text-black">
+                 <path d="M35 65 L50 35 L65 65" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+               </svg>
+            </div>
+          </div>
+
+          <div className="flex flex-col items-center space-y-8">
+            <h1 className="text-4xl font-extrabold tracking-tighter text-zinc-900 dark:text-white">
+              SalesTrack
+            </h1>
+            
+            {/* Elegant iOS Activity Indicator */}
+            <div className="relative w-8 h-8">
+              {[...Array(12)].map((_, i) => (
+                <div 
+                  key={i} 
+                  className="absolute left-[14px] top-0 w-[4px] h-[10px] bg-zinc-400 dark:bg-zinc-600 rounded-full animate-ios-loader origin-[50%_16px]" 
+                  style={{ 
+                    transform: `rotate(${i * 30}deg)`,
+                    animationDelay: `${(i - 12) * 0.1}s`
+                  }} 
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+        
+        <div className="absolute bottom-16 flex flex-col items-center gap-1">
+          <p className="text-[10px] font-bold tracking-[0.4em] uppercase text-zinc-400">
+            Powered by AI
+          </p>
+          <div className="w-12 h-[1px] bg-zinc-200 dark:bg-zinc-800" />
+        </div>
       </div>
     );
   }

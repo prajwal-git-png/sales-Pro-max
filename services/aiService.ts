@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Chat } from "@google/genai";
 import { UserProfile, DailyReport } from "../types";
 import { getUser } from "./storageService";
@@ -22,10 +23,11 @@ const resolveApiKey = (user?: UserProfile | null): string => {
 export const validateApiKey = async (apiKey: string): Promise<boolean> => {
     try {
         const ai = new GoogleGenAI({ apiKey });
+        {/* // FIX: Setting thinkingBudget to 0 when maxOutputTokens is 1 for a quick ping check */}
         await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: 'ping',
-            config: { maxOutputTokens: 1 }
+            config: { maxOutputTokens: 1, thinkingConfig: { thinkingBudget: 0 } }
         });
         return true;
     } catch (e) {
@@ -60,11 +62,13 @@ export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): C
             - Be very concise.
         `;
 
+        {/* // FIX: Added thinkingBudget as required by guidelines when setting maxOutputTokens */}
         return ai.chats.create({
             model: 'gemini-3-flash-preview',
             config: {
                 systemInstruction: systemInstruction,
-                maxOutputTokens: 300
+                maxOutputTokens: 300,
+                thinkingConfig: { thinkingBudget: 150 }
             }
         });
     } catch (e) {
@@ -78,10 +82,11 @@ export const getMotivationalQuote = async (): Promise<string> => {
         if (!key) throw new Error("No Key");
         
         const ai = new GoogleGenAI({ apiKey: key });
+        {/* // FIX: Added thinkingBudget to reserve tokens for output when maxOutputTokens is set */}
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: 'Short powerful retail sales motivation quote. Max 10 words. Plain text.',
-            config: { maxOutputTokens: 30 }
+            config: { maxOutputTokens: 30, thinkingConfig: { thinkingBudget: 15 } }
         });
         return response.text || "Success belongs to those who work for it. 🚀";
     } catch (error) {

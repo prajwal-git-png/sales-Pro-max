@@ -3,7 +3,7 @@ import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Image 
 import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
 import { SaleItem, UserProfile } from '../types';
 import { saveSaleEntry, compressImage, getSales } from '../services/storageService';
-import { generateTextReport } from '../services/reportService';
+import { generateTextReport, formatToDisplayDate } from '../services/reportService';
 
 // --- Product Data Constant ---
 const PRODUCT_LIST = [
@@ -159,7 +159,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
     e.preventDefault();
     
     if (isWeekOff) {
-        if(confirm("Mark " + date + " as Week Off?")) {
+        if(confirm("Mark " + formatToDisplayDate(date) + " as Week Off?")) {
             setIsSubmitting(true);
             setTimeout(() => {
                 const sales = getSales();
@@ -212,7 +212,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
 
   const handleCopyText = () => {
       if(isWeekOff) {
-          navigator.clipboard.writeText(`Name: ${user.name}\nDate: ${date}\nStatus: Week Off`);
+          navigator.clipboard.writeText(`Name: ${user.name}\nDate: ${formatToDisplayDate(date)}\nStatus: Week Off`);
           alert('Week Off report copied');
           return;
       }
@@ -237,7 +237,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
 
   const totalValue = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  const formattedDate = date.split('-').reverse().join('/');
+  const formattedDate = formatToDisplayDate(date);
 
   return (
     <>

@@ -3,10 +3,11 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="theme-color" content="#4f46e5" />
+    <meta name="theme-color" content="#000000" />
     <title>SalesTrack</title>
     <link rel="manifest" href="/manifest.json" />
-    <!-- Tailwind CSS (Using CDN for simplicity) -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22black%22/><path d=%22M35 65 L50 35 L65 65%22 fill=%22none%22 stroke=%22white%22 stroke-width=%228%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>">
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -27,11 +28,26 @@
             animation: {
               'shine': 'shine 3s linear infinite',
               'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'float': 'float 6s ease-in-out infinite',
+              'ios-loader': 'ios-loader 1.2s linear infinite',
+              'reveal': 'reveal 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards',
             },
             keyframes: {
               shine: {
                 '0%': { backgroundPosition: '200% center' },
                 '100%': { backgroundPosition: '-200% center' },
+              },
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-15px)' },
+              },
+              reveal: {
+                '0%': { opacity: '0', transform: 'translateY(20px) scale(0.95)' },
+                '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+              },
+              'ios-loader': {
+                '0%': { opacity: '1' },
+                '100%': { opacity: '0.1' },
               }
             }
           }
@@ -39,7 +55,6 @@
       }
     </script>
     <style>
-      /* Custom Scrollbar for Glass Theme */
       ::-webkit-scrollbar {
         width: 6px;
       }
@@ -47,15 +62,32 @@
         background: transparent;
       }
       ::-webkit-scrollbar-thumb {
-        background: rgba(156, 163, 175, 0.5);
+        background: rgba(156, 163, 175, 0.3);
         border-radius: 10px;
-      }
-      ::-webkit-scrollbar-thumb:hover {
-        background: rgba(156, 163, 175, 0.8);
       }
       body {
         -webkit-tap-highlight-color: transparent;
         overscroll-behavior-y: none;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      }
+      
+      /* Report Image styling: Black and white gradient inner look */
+      .report-img-inner-shadow {
+        position: relative;
+        overflow: hidden;
+      }
+      .report-img-inner-shadow::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        /* Premium inner glow effect */
+        background: radial-gradient(circle, transparent 40%, rgba(255,255,255,0.4) 80%, rgba(255,255,255,0.8) 100%);
+        box-shadow: inset 0 0 40px rgba(255, 255, 255, 0.9);
+        pointer-events: none;
+      }
+      .dark .report-img-inner-shadow::after {
+        background: radial-gradient(circle, transparent 40%, rgba(0,0,0,0.4) 80%, rgba(0,0,0,0.8) 100%);
+        box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.9);
       }
     </style>
 <script type="importmap">
@@ -72,22 +104,8 @@
 }
 </script>
 </head>
-  <body class="bg-gradient-to-br from-indigo-100 via-purple-100 to-pink-100 dark:bg-black min-h-screen transition-colors duration-500 text-slate-800 dark:text-slate-100">
+  <body class="bg-slate-50 dark:bg-black min-h-screen transition-colors duration-500 text-slate-800 dark:text-slate-100">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          // Use relative path for SW to avoid construction errors
-          navigator.serviceWorker.register('./sw.js')
-            .then(registration => {
-              console.log('SW registered with scope:', registration.scope);
-            })
-            .catch(error => {
-              console.log('SW registration failed:', error);
-            });
-        });
-      }
-    </script>
   </body>
 </html>

@@ -3,7 +3,7 @@ import { Send, Target, TrendingUp, Calendar, Copy, Check, ChevronLeft, ChevronRi
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile, StoreEODEntry } from '../types';
 import { saveUser, getEODEntries, saveEODEntry, deleteEODEntry } from '../services/storageService';
-import { generateStoreEODReport } from '../services/reportService';
+import { generateStoreEODReport, formatToDisplayDate } from '../services/reportService';
 
 interface EODProps {
     user: UserProfile;
@@ -312,7 +312,7 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
                             .map(entry => (
                                 <div key={entry.date} className="flex justify-between items-center p-3 bg-white/40 dark:bg-white/5 rounded-xl border border-white/20">
                                     <div>
-                                        <p className="text-sm font-bold">{new Date(entry.date).toLocaleDateString(undefined, { day:'numeric', month:'short' })}</p>
+                                        <p className="text-sm font-bold">{formatToDisplayDate(entry.date)}</p>
                                         <p className="text-[10px] text-slate-500">Achieved: ₹{entry.achievement.toLocaleString()}</p>
                                     </div>
                                     <div className="flex items-center gap-4">
@@ -335,7 +335,7 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
                     <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto text-green-600">
                         <Check size={32} />
                     </div>
-                    <p className="text-sm font-medium">Store EOD targets and achievement updated for {new Date(date).toLocaleDateString()}.</p>
+                    <p className="text-sm font-medium">Store EOD targets and achievement updated for {formatToDisplayDate(date)}.</p>
                     <GlassButton onClick={() => setShowSuccess(false)} variant="secondary" className="w-full">Done</GlassButton>
                 </div>
             </Modal>
