@@ -56,53 +56,216 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
   };
 
   const handlePrintView = () => {
+      const allSales = getSales();
+      let salesToPrint = allSales;
+
+      // Filter by month if selected
+      if (backupMonth) {
+          salesToPrint = allSales.filter(s => s.date.startsWith(backupMonth));
+      }
+
+      if (salesToPrint.length === 0) {
+          alert("No records found to print.");
+          return;
+      }
+
+      // Sort by date (Newest First)
+      salesToPrint.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
       // Create a print-friendly window
-      const sales = getSales();
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(`
+            <!DOCTYPE html>
             <html>
                 <head>
-                    <title>Print Report</title>
+                    <title>Sales Report - ${user.name}</title>
                     <style>
-                        body { font-family: sans-serif; padding: 20px; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-                        th { background-color: #f2f2f2; }
-                        .header { margin-bottom: 20px; }
-                        img { max-width: 100px; }
+                        body { 
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+                            padding: 40px; 
+                            color: #1e293b;
+                            background: white;
+                        }
+                        .header { 
+                            margin-bottom: 30px; 
+                            border-bottom: 3px solid #6366f1; 
+                            padding-bottom: 20px; 
+                        }
+                        .header h1 { 
+                            margin: 0 0 10px 0; 
+                            color: #1e1b4b; 
+                            font-size: 28px;
+                        }
+                        .meta { 
+                            display: grid; 
+                            grid-template-columns: repeat(2, 1fr); 
+                            gap: 15px; 
+                            font-size: 14px;
+                            color: #475569;
+                        }
+                        
+                        /* Table Styles */
+                        table { 
+                            width: 100%; 
+                            border-collapse: collapse; 
+                            margin-bottom: 30px; 
+                            font-size: 13px; 
+                        }
+                        th, td { 
+                            border: 1px solid #e2e8f0; 
+                            padding: 10px 12px; 
+                            text-align: left; 
+                        }
+                        th { 
+                            background-color: #f8fafc; 
+                            font-weight: 700; 
+                            color: #334155; 
+                            text-transform: uppercase;
+                            font-size: 12px;
+                            letter-spacing: 0.5px;
+                        }
+                        tr:nth-child(even) { background-color: #f8fafc; }
+                        tr.week-off { background-color: #f1f5f9; color: #94a3b8; font-style: italic; }
+
+                        /* Bill Section Styles */
+                        .section-title {
+                            font-size: 20px;
+                            font-weight: bold;
+                            margin: 40px 0 20px 0;
+                            padding-bottom: 10px;
+                            border-bottom: 2px solid #e2e8f0;
+                            color: #334155;
+                            page-break-before: always;
+                        }
+                        .bill-entry { 
+                            margin-bottom: 40px; 
+                            page-break-inside: avoid; 
+                            border: 1px solid #e2e8f0; 
+                            border-radius: 12px; 
+                            padding: 20px; 
+                            background: #fdfdfd;
+                        }
+                        .bill-header { 
+                            font-weight: bold; 
+                            font-size: 16px; 
+                            margin-bottom: 15px; 
+                            padding-bottom: 10px; 
+                            border-bottom: 1px solid #f1f5f9; 
+                            display: flex; 
+                            justify-content: space-between; 
+                            color: #0f172a;
+                        }
+                        .bill-grid { 
+                            display: grid; 
+                            grid-template-columns: repeat(2, 1fr); 
+                            gap: 20px; 
+                        }
+                        .bill-img-container { 
+                            text-align: center; 
+                            background: white;
+                            padding: 10px;
+                            border: 1px solid #f1f5f9;
+                            border-radius: 8px;
+                            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+                        }
+                        .bill-img { 
+                            width: 100%; 
+                            height: auto; 
+                            max-height: 500px;
+                            object-fit: contain;
+                            border-radius: 4px; 
+                        }
+                        .bill-caption {
+                            font-size: 12px; 
+                            color: #64748b; 
+                            margin-top: 8px;
+                            font-weight: 500;
+                        }
+                        
+                        @media print {
+                            body { padding: 0; }
+                            .section-title { page-break-before: always; }
+                            .bill-grid { display: block; } /* Stack images in print for max size */
+                            .bill-img-container { margin-bottom: 20px; border: none; box-shadow: none; }
+                            .bill-img { max-height: 800px; }
+                        }
                     </style>
                 </head>
                 <body>
                     <div class="header">
                         <h1>Sales Report</h1>
-                        <p><strong>Executive:</strong> ${user.name} (${user.employeeId})</p>
-                        <p><strong>Store:</strong> ${user.storeName}</p>
-                        <p><strong>Generated:</strong> ${new Date().toLocaleDateString()}</p>
+                        <div class="meta">
+                            <div><strong>Executive:</strong> ${user.name} (${user.employeeId})</div>
+                            <div><strong>Store:</strong> ${user.storeName}</div>
+                            <div><strong>Period:</strong> ${backupMonth ? backupMonth : 'All Records'}</div>
+                            <div><strong>Generated:</strong> ${new Date().toLocaleDateString()}</div>
+                        </div>
                     </div>
+
+                    <h3>Performance Summary</h3>
                     <table>
                         <thead>
                             <tr>
                                 <th>Date</th>
-                                <th>Products</th>
+                                <th>Items Sold</th>
                                 <th>Total Qty</th>
                                 <th>Total Value</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${sales.map(s => `
-                                <tr>
-                                    <td>${s.date}</td>
+                            ${salesToPrint.map(s => `
+                                <tr class="${s.isWeekOff ? 'week-off' : ''}">
+                                    <td style="white-space:nowrap">${s.date}</td>
                                     <td>
-                                        ${s.items.map(i => `<div>${i.productName} (${i.quantity} x ${i.price})</div>`).join('')}
+                                        ${s.isWeekOff ? 'Week Off' : s.items.map(i => `<div style="margin-bottom:4px;">${i.productName} <span style="color:#64748b; font-size:0.9em">(${i.quantity} x ₹${i.price})</span></div>`).join('')}
                                     </td>
                                     <td>${s.totalQty}</td>
-                                    <td>₹${s.totalValue}</td>
+                                    <td>₹${s.totalValue.toLocaleString()}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
+                        <tfoot>
+                             <tr style="font-weight:bold; background-color: #f1f5f9;">
+                                <td colspan="2" style="text-align:right; padding-right: 20px;">GRAND TOTAL</td>
+                                <td>${salesToPrint.reduce((acc, s) => acc + s.totalQty, 0)}</td>
+                                <td>₹${salesToPrint.reduce((acc, s) => acc + s.totalValue, 0).toLocaleString()}</td>
+                            </tr>
+                        </tfoot>
                     </table>
-                    <script>window.print();</script>
+
+                    ${salesToPrint.some(s => (s.billImages?.length || s.billImage)) ? `
+                        <div class="section-title">Bill Attachments</div>
+                        <div>
+                            ${salesToPrint.filter(s => (s.billImages?.length || s.billImage)).map(s => {
+                                const images = s.billImages || (s.billImage ? [s.billImage] : []);
+                                if (images.length === 0) return '';
+                                
+                                return `
+                                    <div class="bill-entry">
+                                        <div class="bill-header">
+                                            <span>📅 ${s.date}</span>
+                                            <span>₹${s.totalValue.toLocaleString()}</span>
+                                        </div>
+                                        <div class="bill-grid">
+                                            ${images.map((img, idx) => `
+                                                <div class="bill-img-container">
+                                                    <img src="${img}" class="bill-img" alt="Bill" />
+                                                    <div class="bill-caption">Attachment ${idx + 1}</div>
+                                                </div>
+                                            `).join('')}
+                                        </div>
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    ` : ''}
+
+                    <script>
+                        window.onload = function() {
+                            setTimeout(() => window.print(), 800);
+                        }
+                    </script>
                 </body>
             </html>
         `);
@@ -160,7 +323,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
         <h3 className="font-bold text-lg px-2">Data & Reports</h3>
         <GlassCard className="p-4 space-y-4">
             <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Backup Month (Optional)</label>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wide">Select Month (For Backup/Print)</label>
                 <input 
                     type="month" 
                     value={backupMonth}
@@ -182,7 +345,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                     className="flex flex-col items-center justify-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-300 hover:bg-red-100 transition-colors"
                 >
                     <Download size={20} />
-                    <span className="text-xs font-bold">Print View</span>
+                    <span className="text-xs font-bold">Print/PDF</span>
                 </button>
             </div>
             
@@ -218,7 +381,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
             <LogOut size={18} /> Logout
         </GlassButton>
         
-        <p className="text-center text-xs text-slate-400 py-4">Version 5.0.0 • Built for Sales Executives</p>
+        <p className="text-center text-xs text-slate-400 py-4">Version 5.1.0 • Built for Sales Executives</p>
     </div>
   );
 };

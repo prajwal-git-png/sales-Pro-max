@@ -78,13 +78,13 @@
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-          // Use relative path to avoid origin mismatch issues in preview environments
+          // Use relative path for SW to avoid construction errors
           navigator.serviceWorker.register('./sw.js')
             .then(registration => {
-              console.log('SW registered: ', registration);
+              console.log('SW registered with scope:', registration.scope);
             })
             .catch(error => {
-              console.warn('SW registration failed:', error);
+              console.log('SW registration failed:', error);
             });
         });
       }

@@ -61,18 +61,20 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
     if (showCoach && !chatSession && user) {
         try {
             const chat = createSalesCoachChat(user, salesData);
-            setChatSession(chat);
-            setIsTyping(true);
-            
-            chat.sendMessage({ message: "Generate a short, friendly greeting." })
-                .then(res => {
-                    if (res.text) setMessages([{ role: 'model', text: res.text }]);
-                })
-                .catch(() => {
-                    // Silent fail on init, user will see offline mode on first message
-                    setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode Available)" }]);
-                })
-                .finally(() => setIsTyping(false));
+            if (chat) {
+                setChatSession(chat);
+                setIsTyping(true);
+                chat.sendMessage({ message: "Generate a short, friendly greeting." })
+                    .then(res => {
+                        if (res.text) setMessages([{ role: 'model', text: res.text }]);
+                    })
+                    .catch(() => {
+                        setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode Available)" }]);
+                    })
+                    .finally(() => setIsTyping(false));
+            } else {
+                 setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode)" }]);
+            }
         } catch (e) {
              setMessages([{ role: 'model', text: "Hello! I'm ready to help with your sales and product questions. (Offline Mode)" }]);
         }

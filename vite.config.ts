@@ -8,9 +8,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, (process as any).cwd(), '');
   
   // Vercel injects env vars into process.env, local dev uses .env via loadEnv
-  const apiKey = process.env.API_KEY || env.API_KEY;
+  // Default to empty string if undefined to avoid build issues
+  const apiKey = process.env.API_KEY || env.API_KEY || '';
 
   return {
+    base: './', // Ensure relative paths for assets in preview/production
     plugins: [react()],
     define: {
       'process.env.API_KEY': JSON.stringify(apiKey)

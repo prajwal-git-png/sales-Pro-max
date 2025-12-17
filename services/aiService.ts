@@ -1,12 +1,37 @@
 import { GoogleGenAI, Chat } from "@google/genai";
 import { UserProfile, DailyReport } from "../types";
 
-// @ts-ignore - process.env provided by build environment
-const apiKey = process.env.API_KEY;
+// Robustly retrieve API key to prevent "process is not defined" crashes
+let apiKey = '';
+try {
+  // @ts-ignore
+  apiKey = process.env.API_KEY || '';
+} catch (e) {
+  console.warn("Environment variables not accessible");
+}
 
-const ai = new GoogleGenAI({ apiKey });
+// Lazy initialization of AI client
+let aiInstance: GoogleGenAI | null = null;
 
-export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): Chat => {
+const getAiClient = () => {
+    if (aiInstance) return aiInstance;
+    if (apiKey) {
+        try {
+            aiInstance = new GoogleGenAI({ apiKey });
+        } catch (error) {
+            console.error("Failed to initialize GoogleGenAI", error);
+        }
+    }
+    return aiInstance;
+};
+
+export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): Chat | null => {
+    const ai = getAiClient();
+    if (!ai) {
+        console.warn("AI Client not initialized (Missing Key)");
+        return null;
+    }
+
     // Prepare context
     const recentSales = sales
         .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
@@ -33,7 +58,6 @@ export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): C
         model: 'gemini-2.5-flash',
         config: {
             systemInstruction: systemInstruction,
-            // Fix: Set thinkingBudget when using maxOutputTokens to avoid errors with 2.5 models
             maxOutputTokens: 300, 
             thinkingConfig: { thinkingBudget: 0 }
         }
@@ -42,12 +66,12 @@ export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): C
 
 export const getMotivationalQuote = async (): Promise<string> => {
     try {
-        if (!apiKey) throw new Error("No API Key");
+        const ai = getAiClient();
+        if (!ai) throw new Error("No API Key");
         
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: 'Generate a short, powerful retail sales motivation quote. Max 15 words. Plain text.',
-            // Fix: Set thinkingBudget when using maxOutputTokens to avoid errors with 2.5 models
             config: { 
                 maxOutputTokens: 50,
                 thinkingConfig: { thinkingBudget: 0 }
@@ -55,7 +79,7 @@ export const getMotivationalQuote = async (): Promise<string> => {
         });
         return response.text || "Success is a journey, not a destination. 🚀";
     } catch (error) {
-        console.warn("AI Offline, using fallback quote");
+        // Silent fail for quote
         return "Your hard work today is your success tomorrow. 💪";
     }
 };
