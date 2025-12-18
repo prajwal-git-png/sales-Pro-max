@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { User, LogOut, FileText, Download, Database, AlertTriangle, Info, Upload, CheckCircle2, ShieldAlert } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { User, LogOut, FileText, Download, Database, AlertTriangle, Info, Upload, CheckCircle2, Target, TrendingUp } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile } from '../types';
 import { saveUser, getSales, compressImage, exportFullBackup, importFullBackup, BackupPackage } from '../services/storageService';
@@ -145,7 +145,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                         th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 12px; }
                         th { background: #f4f4f4; text-transform: uppercase; }
                         .bills-title { margin: 40px 0 20px; font-size: 18px; font-weight: bold; border-left: 5px solid #000; padding-left: 10px; }
-                        @media print { .bill-group { border-color: #ddd; } }
                     </style>
                 </head>
                 <body>
@@ -194,10 +193,38 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
             
             {isEditing ? (
                 <div className="space-y-4 text-left">
-                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-400 uppercase">Executive Name</label><GlassInput value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} /></div>
-                    <div className="space-y-1"><label className="text-[10px] font-bold text-slate-400 uppercase">Store</label><GlassInput value={editForm.storeName} onChange={e => setEditForm({...editForm, storeName: e.target.value})} /></div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <GlassButton onClick={handleSave} className="w-full">Save</GlassButton>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Executive Name</label>
+                        <GlassInput value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase">Store</label>
+                        <GlassInput value={editForm.storeName} onChange={e => setEditForm({...editForm, storeName: e.target.value})} />
+                    </div>
+                    
+                    {/* Re-added Target Options */}
+                    <div className="pt-2 border-t border-dashed border-gray-200 dark:border-white/10 mt-2 space-y-3">
+                         <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                             <Target size={14} /> Sales Targets (₹)
+                         </h4>
+                         <div className="grid grid-cols-2 gap-3">
+                             <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Monthly</label>
+                                <GlassInput type="number" value={editForm.monthlyTarget} onChange={e => setEditForm({...editForm, monthlyTarget: parseInt(e.target.value) || 0})} className="h-10 text-sm" />
+                             </div>
+                             <div className="space-y-1">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Weekly (EOD)</label>
+                                <GlassInput type="number" value={editForm.customTargets?.weekly || 0} onChange={e => setEditForm({...editForm, customTargets: { ...editForm.customTargets!, weekly: parseInt(e.target.value) || 0 }})} className="h-10 text-sm" />
+                             </div>
+                             <div className="space-y-1 col-span-2">
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">EOL Target</label>
+                                <GlassInput type="number" value={editForm.customTargets?.eol || 0} onChange={e => setEditForm({...editForm, customTargets: { ...editForm.customTargets!, eol: parseInt(e.target.value) || 0 }})} className="h-10 text-sm" />
+                             </div>
+                         </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-2">
+                        <GlassButton onClick={handleSave} className="w-full">Save Changes</GlassButton>
                         <GlassButton onClick={() => { setIsEditing(false); setEditForm(user); }} variant="secondary" className="w-full">Cancel</GlassButton>
                     </div>
                 </div>
@@ -206,9 +233,9 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                     <h2 className="text-xl font-bold">{user.name}</h2>
                     <p className="text-sm text-slate-500">{user.storeName}</p>
                     <div className="mt-4 flex flex-col items-center gap-2">
-                        <button onClick={() => setIsEditing(true)} className="text-blue-600 text-xs font-bold hover:underline bg-blue-50 px-4 py-1.5 rounded-full transition-all">Edit Details</button>
+                        <button onClick={() => setIsEditing(true)} className="text-blue-600 text-xs font-bold hover:underline bg-blue-50 px-4 py-1.5 rounded-full transition-all">Edit Profile & Targets</button>
                         <div className="flex items-center gap-1.5 text-[10px] text-green-600 font-bold uppercase tracking-wider bg-green-50 px-3 py-1 rounded-full border border-green-100">
-                             <CheckCircle2 size={10} /> API Connection Active
+                             <CheckCircle2 size={10} /> AI Sales Coach Online
                         </div>
                     </div>
                 </>
