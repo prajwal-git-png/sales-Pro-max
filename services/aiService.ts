@@ -3,6 +3,7 @@ import { UserProfile, DailyReport } from "../types";
 
 export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]) => {
     try {
+        // Platform provides process.env.API_KEY automatically
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
         const recentSales = [...sales]
@@ -17,18 +18,22 @@ export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]) =>
             You are an expert Bajaj Electricals Sales Coach. 
             User: ${user.name} (${user.storeName}).
             
+            Context:
+            - Company: Bajaj Electricals Ltd.
+            - Products: Mixers (GX/MG), Geysers (Storage/Instant), Irons (Dry/Steam), Induction Cooktops.
+            
             Recent Performance:
             ${salesSummary || 'No recent sales recorded.'}
 
-            Task:
-            1. Analyze sales performance.
-            2. Answer questions about Bajaj products (Mixers, Geysers, Irons).
-            3. Provide closing tips for retail customers.
+            Goal:
+            - Provide sales tactics.
+            - Explain technical features of Bajaj vs competitors.
+            - Stay positive and motivating.
 
-            Rules:
-            - Response MUST be plain text only.
-            - Use relevant Emojis.
-            - Be concise and professional.
+            Constraint:
+            - Plain text only (no Markdown bolding/headings if possible).
+            - Use Emojis for personality.
+            - Max 150 words per reply.
         `;
 
         return ai.chats.create({
@@ -36,11 +41,11 @@ export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]) =>
             config: {
                 systemInstruction: systemInstruction,
                 maxOutputTokens: 1000,
-                thinkingConfig: { thinkingBudget: 500 }
+                thinkingConfig: { thinkingBudget: 0 } // Flash model, thinking disabled for speed
             }
         });
     } catch (e) {
-        console.error("Failed to create chat session:", e);
+        console.error("AI Initialization failed:", e);
         return null;
     }
 };
@@ -50,24 +55,19 @@ export const getMotivationalQuote = async (): Promise<string> => {
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: 'Provide a short, powerful, one-sentence retail sales motivation quote (max 12 words) with an emoji.',
-            config: { 
-                maxOutputTokens: 100, 
-                thinkingConfig: { thinkingBudget: 50 } 
-            }
+            contents: 'One short retail sales motivation quote for today (under 10 words).',
+            config: { maxOutputTokens: 50 }
         });
-        return response.text || "Success belongs to those who work for it. 🚀";
+        return response.text?.trim() || "The best way to predict the future is to create it. 🚀";
     } catch (error) {
-        console.error("Failed to fetch quote:", error);
-        return "Your hard work today is your success tomorrow. 💪";
+        return "Every customer is an opportunity for greatness. 💪";
     }
 };
 
 export const getOfflineResponse = (query: string, user: UserProfile): string => {
     const lower = query.toLowerCase();
-    if (lower.includes('hello')) return `Hello ${user.name}! I'm currently in offline mode, but I can still share some basic product info. ⚡`;
-    if (lower.includes('mixer')) return "🔹 Bajaj GX Series: Feature 500-750W motors and Duracut blades for fine grinding.";
-    if (lower.includes('geyser')) return "🔹 Bajaj Storage Geysers: Feature Glassline-coated tanks and provide up to 20% more hot water.";
-    if (lower.includes('iron')) return "🔹 Bajaj Irons: Available in Dry and Steam variants with non-stick coated soleplates.";
-    return "I am currently operating in Offline Mode. Please check your internet connection for full AI coaching! 🌐";
+    if (lower.includes('mixer')) return "The Bajaj GX-1 Mixer (500W) is our bestseller with 3 jars and 18000 RPM. Perfect for fine grinding! 🌪️";
+    if (lower.includes('geyser')) return "Our Pentacle Storage Geysers have Glassline-coated tanks for long life in hard water areas. 💧";
+    if (lower.includes('iron')) return "Bajaj DX11 is the #1 dry iron in India. Non-stick coating and 1000W for quick results! 👕";
+    return `Hello ${user.name}! I'm in offline mode right now, but I'm still here to help with Bajaj product info. Try asking about Mixers or Geysers!`;
 };
