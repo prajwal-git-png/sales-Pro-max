@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { User, LogOut, FileText, Download, Database, AlertTriangle, Info, Upload, CheckCircle2, Target, TrendingUp } from 'lucide-react';
+import { User, LogOut, Download, Database, AlertTriangle, Info, Upload, CheckCircle2, Target } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile } from '../types';
 import { saveUser, getSales, compressImage, exportFullBackup, importFullBackup, BackupPackage } from '../services/storageService';
@@ -87,7 +87,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
           setPendingBackupData(content);
           setShowRestoreModal(true);
       } catch (err) {
-          alert("Error reading file. JSON might be malformed.");
+          alert("Error reading file.");
       }
       e.target.value = '';
     };
@@ -202,22 +202,21 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                         <GlassInput value={editForm.storeName} onChange={e => setEditForm({...editForm, storeName: e.target.value})} />
                     </div>
                     
-                    {/* Re-added Target Options */}
                     <div className="pt-2 border-t border-dashed border-gray-200 dark:border-white/10 mt-2 space-y-3">
                          <h4 className="text-[11px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                             <Target size={14} /> Sales Targets (₹)
+                             <Target size={14} /> Performance Targets (₹)
                          </h4>
                          <div className="grid grid-cols-2 gap-3">
                              <div className="space-y-1">
-                                <label className="text-[9px] font-bold text-slate-400 uppercase">Monthly</label>
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Monthly Total</label>
                                 <GlassInput type="number" value={editForm.monthlyTarget} onChange={e => setEditForm({...editForm, monthlyTarget: parseInt(e.target.value) || 0})} className="h-10 text-sm" />
                              </div>
                              <div className="space-y-1">
-                                <label className="text-[9px] font-bold text-slate-400 uppercase">Weekly (EOD)</label>
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">Weekly Goal</label>
                                 <GlassInput type="number" value={editForm.customTargets?.weekly || 0} onChange={e => setEditForm({...editForm, customTargets: { ...editForm.customTargets!, weekly: parseInt(e.target.value) || 0 }})} className="h-10 text-sm" />
                              </div>
                              <div className="space-y-1 col-span-2">
-                                <label className="text-[9px] font-bold text-slate-400 uppercase">EOL Target</label>
+                                <label className="text-[9px] font-bold text-slate-400 uppercase">EOL Specific Target</label>
                                 <GlassInput type="number" value={editForm.customTargets?.eol || 0} onChange={e => setEditForm({...editForm, customTargets: { ...editForm.customTargets!, eol: parseInt(e.target.value) || 0 }})} className="h-10 text-sm" />
                              </div>
                          </div>
@@ -233,7 +232,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                     <h2 className="text-xl font-bold">{user.name}</h2>
                     <p className="text-sm text-slate-500">{user.storeName}</p>
                     <div className="mt-4 flex flex-col items-center gap-2">
-                        <button onClick={() => setIsEditing(true)} className="text-blue-600 text-xs font-bold hover:underline bg-blue-50 px-4 py-1.5 rounded-full transition-all">Edit Profile & Targets</button>
+                        <button onClick={() => setIsEditing(true)} className="text-blue-600 text-xs font-bold hover:underline bg-blue-50 px-4 py-1.5 rounded-full transition-all">Update Profile & Targets</button>
                         <div className="flex items-center gap-1.5 text-[10px] text-green-600 font-bold uppercase tracking-wider bg-green-50 px-3 py-1 rounded-full border border-green-100">
                              <CheckCircle2 size={10} /> AI Sales Coach Online
                         </div>
@@ -276,10 +275,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                         <p className="text-[10px] font-bold text-slate-400 uppercase">Backup File Info</p>
                         <p className="text-sm font-bold">Executive: {restoreSummary.userName}</p>
                         <p className="text-[11px] text-slate-500">Date: {restoreSummary.date}</p>
-                        <div className="flex gap-4 pt-2 border-t mt-2">
-                            <div className="text-center flex-1"><p className="text-lg font-bold">{restoreSummary.salesCount}</p><p className="text-[8px] uppercase text-slate-400">Sales</p></div>
-                            <div className="text-center flex-1"><p className="text-lg font-bold">{restoreSummary.crmCount}</p><p className="text-[8px] uppercase text-slate-400">Tickets</p></div>
-                        </div>
                     </div>
                 )}
                 <div className="flex gap-3">

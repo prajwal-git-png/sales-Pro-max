@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Home, PlusCircle, Users, Settings, Sun, Moon, Sparkles, Send, X, ClipboardCheck } from 'lucide-react';
 import { Tab, UserProfile, DailyReport } from '../types';
-import { createSalesCoachChat, getOfflineResponse } from '../services/aiService';
+import { sendCoachMessage, getOfflineResponse, ChatMessage } from '../services/aiService';
 import { Modal } from './ui/GlassComponents';
 
 interface LayoutProps {
@@ -14,14 +14,8 @@ interface LayoutProps {
   salesData: DailyReport[];
 }
 
-interface ChatMessage {
-    role: 'user' | 'model';
-    text: string;
-}
-
 const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDark, toggleTheme, user, salesData }) => {
   const [showCoach, setShowCoach] = useState(false);
-  const [chatSession, setChatSession] = useState<any>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMsg, setInputMsg] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -50,30 +44,11 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
       if (!isDragging) setShowCoach(true);
   };
 
-  // Initialize chat session only when modal opens and no session exists
   useEffect(() => {
-    if (showCoach && !chatSession && user) {
-        const initChat = async () => {
-            setIsTyping(true);
-            const session = createSalesCoachChat(user, salesData);
-            if (session) {
-                setChatSession(session);
-                try {
-                    const res = await session.sendMessage({ message: "Say a quick hello to me!" });
-                    if (res.text) {
-                        setMessages([{ role: 'model', text: res.text }]);
-                    }
-                } catch (err) {
-                    setMessages([{ role: 'model', text: "Ready to coach you! How can I help today?" }]);
-                }
-            } else {
-                setMessages([{ role: 'model', text: "AI service is currently unavailable. Using offline assistant." }]);
-            }
-            setIsTyping(false);
-        };
-        initChat();
+    if (showCoach && messages.length === 0 && user) {
+        setMessages([{ role: 'model', text: `Hi ${user.name.split(' ')[0]}! I'm your Bajaj Sales Coach. How can I help you close more deals today? 🚀` }]);
     }
-  }, [showCoach, user]); // Only re-init if user changes or coach is toggled
+  }, [showCoach, user]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -81,7 +56,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
 
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!inputMsg.trim() || !user) return;
+    if (!inputMsg.trim() || !user || isTyping) return;
     
     const userText = inputMsg;
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
@@ -89,21 +64,17 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
     setIsTyping(true);
 
     try {
-        if (!chatSession) throw new Error("Offline");
-        const result = await chatSession.sendMessage({ message: userText });
-        if (result.text) {
-            setMessages(prev => [...prev, { role: 'model', text: result.text }]);
-        }
+        const reply = await sendCoachMessage(user, salesData, messages, userText);
+        setMessages(prev => [...prev, { role: 'model', text: reply }]);
     } catch (err) {
-        console.error("Chat error:", err);
+        console.error("Chat Error, falling back to offline:", err);
         setTimeout(() => {
             const reply = getOfflineResponse(userText, user);
             setMessages(prev => [...prev, { role: 'model', text: reply }]);
-            setIsTyping(false);
-        }, 600);
-        return; 
+        }, 800);
+    } finally {
+        setIsTyping(false);
     }
-    setIsTyping(false);
   };
 
   if (!user) return <>{children}</>;
@@ -176,13 +147,24 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
                         </div>
                     </div>
                 ))}
-                {isTyping && <div className="flex justify-start animate-pulse"><div className="bg-gray-100 dark:bg-zinc-800 px-4 py-3 rounded-2xl">...</div></div>}
+                {isTyping && <div className="flex justify-start animate-pulse"><div className="bg-gray-100 dark:bg-zinc-800 px-4 py-3 rounded-2xl">Coach is thinking...</div></div>}
                 <div ref={messagesEndRef} />
             </div>
             <div className="pt-3 border-t border-gray-100 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
                 <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
-                    <input value={inputMsg} onChange={e => setInputMsg(e.target.value)} placeholder="Ask anything..." className="flex-1 bg-white dark:bg-zinc-800 border rounded-full px-4 py-2.5 text-sm" />
-                    <button type="submit" className="p-2.5 bg-black dark:bg-white text-white dark:text-black rounded-full shadow-lg transition-transform active:scale-90"><Send size={18} /></button>
+                    <input 
+                      value={inputMsg} 
+                      onChange={e => setInputMsg(e.target.value)} 
+                      placeholder="Ask for sales tips..." 
+                      className="flex-1 bg-white dark:bg-zinc-800 border rounded-full px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20" 
+                    />
+                    <button 
+                      type="submit" 
+                      disabled={isTyping}
+                      className="p-2.5 bg-black dark:bg-white text-white dark:text-black rounded-full shadow-lg transition-transform active:scale-90 disabled:opacity-50"
+                    >
+                      <Send size={18} />
+                    </button>
                 </form>
             </div>
         </div>
