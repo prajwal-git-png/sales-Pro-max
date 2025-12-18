@@ -24,7 +24,11 @@ const setJSON = (key: string, value: any) => {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
     console.error(`Error saving ${key}`, e);
-    alert('Storage full! Please clear some data or old images.');
+    // If we hit quota, try to inform the user
+    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
+      throw new Error('Storage limit reached. Try deleting old reports with many images.');
+    }
+    throw e;
   }
 };
 
@@ -130,35 +134,61 @@ export const updateComplaint = (updated: Complaint) => {
 export const getTheme = (): 'light' | 'dark' => (localStorage.getItem(KEYS.THEME) as 'light' | 'dark') || 'light';
 export const saveTheme = (theme: 'light' | 'dark') => localStorage.setItem(KEYS.THEME, theme);
 
-// --- Backup & Restore ---
-export const exportFullBackup = () => {
-  const backup = {
-    version: '5.2.0',
-    exportDate: new Date().toISOString(),
-    user: getJSON(KEYS.USER),
-    sales: getJSON(KEYS.SALES) || [],
-    eod: getJSON(KEYS.EOD) || [],
-    crm: getJSON(KEYS.CRM) || [],
-    theme: localStorage.getItem(KEYS.THEME) || 'light'
+// --- Backup & Restore (Reworked) ---
+export interface BackupPackage {
+  app: 'SalesTrack';
+  version: string;
+  timestamp: string;
+  data: {
+    user: UserProfile | null;
+    sales: DailyReport[];
+    eod: StoreEODEntry[];
+    crm: Complaint[];
+    theme: string;
+  }
+}
+
+export const exportFullBackup = (): string => {
+  const packageData: BackupPackage = {
+    app: 'SalesTrack',
+    version: '5.5.0',
+    timestamp: new Date().toISOString(),
+    data: {
+      user: getJSON<UserProfile>(KEYS.USER),
+      sales: getSales(),
+      eod: getEODEntries(),
+      crm: getComplaints(),
+      theme: localStorage.getItem(KEYS.THEME) || 'light'
+    }
   };
-  return JSON.stringify(backup, null, 2);
+  return JSON.stringify(packageData);
 };
 
-export const importFullBackup = (jsonString: string): boolean => {
+export const importFullBackup = (jsonString: string): { success: boolean; message: string } => {
   try {
-    const data = JSON.parse(jsonString);
-    if (!data.user && !data.sales) throw new Error("Invalid backup format");
-
-    if (data.user) setJSON(KEYS.USER, data.user);
-    if (data.sales) setJSON(KEYS.SALES, data.sales);
-    if (data.eod) setJSON(KEYS.EOD, data.eod);
-    if (data.crm) setJSON(KEYS.CRM, data.crm);
-    if (data.theme) localStorage.setItem(KEYS.THEME, data.theme);
+    const parsed = JSON.parse(jsonString);
     
-    return true;
-  } catch (e) {
-    console.error("Restore failed", e);
-    return false;
+    // Basic validation
+    if (parsed.app !== 'SalesTrack' || !parsed.data) {
+      return { success: false, message: 'Invalid file format. Please use a SalesTrack backup file.' };
+    }
+
+    const { user, sales, eod, crm, theme } = parsed.data;
+
+    // Nuclear clear to ensure no key collisions or leftover junk
+    localStorage.clear();
+
+    // Re-apply keys
+    if (user) setJSON(KEYS.USER, user);
+    if (sales) setJSON(KEYS.SALES, sales);
+    if (eod) setJSON(KEYS.EOD, eod);
+    if (crm) setJSON(KEYS.CRM, crm);
+    if (theme) localStorage.setItem(KEYS.THEME, theme);
+    
+    return { success: true, message: 'Backup restored successfully!' };
+  } catch (e: any) {
+    console.error("Restore failed:", e);
+    return { success: false, message: `Restore failed: ${e.message || 'Unknown error'}` };
   }
 };
 
@@ -172,14 +202,29 @@ export const compressImage = (file: File): Promise<string> => {
             img.src = event.target?.result as string;
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                const scale = 1024 / img.width;
-                const width = scale < 1 ? 1024 : img.width;
-                const height = scale < 1 ? img.height * scale : img.height;
+                // Target a max width of 1024 for better storage management
+                const maxDim = 1024;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                    if (width > maxDim) {
+                        height *= maxDim / width;
+                        width = maxDim;
+                    }
+                } else {
+                    if (height > maxDim) {
+                        width *= maxDim / height;
+                        height = maxDim;
+                    }
+                }
+
                 canvas.width = width;
                 canvas.height = height;
                 const ctx = canvas.getContext('2d');
                 ctx?.drawImage(img, 0, 0, width, height);
-                resolve(canvas.toDataURL('image/jpeg', 0.7));
+                // Lower quality slightly to 0.6 for significant space saving
+                resolve(canvas.toDataURL('image/jpeg', 0.6));
             };
         };
         reader.onerror = error => reject(error);
