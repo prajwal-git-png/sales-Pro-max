@@ -1,10 +1,9 @@
 import React, { useState, useRef } from 'react';
-import { User, LogOut, FileText, Download, Key, CheckCircle2, Loader2, Upload, Database, AlertTriangle, Info, ShieldCheck } from 'lucide-react';
+import { User, LogOut, FileText, Download, Database, AlertTriangle, Info, Upload } from 'lucide-react';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
-import { UserProfile, DailyReport } from '../types';
+import { UserProfile } from '../types';
 import { saveUser, getSales, compressImage, exportFullBackup, importFullBackup, BackupPackage } from '../services/storageService';
 import { downloadCSV } from '../services/reportService';
-import { validateApiKey } from '../services/aiService';
 
 interface SettingsProps {
   user: UserProfile;
@@ -17,9 +16,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
   const [editForm, setEditForm] = useState(user);
   const [backupMonth, setBackupMonth] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
-  // API Key Validation State
-  const [keyStatus, setKeyStatus] = useState<'idle' | 'valid' | 'invalid' | 'checking'>('idle');
   
   // Restore State
   const [showRestoreModal, setShowRestoreModal] = useState(false);
@@ -47,16 +43,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
               alert('Image processing failed.');
           }
       }
-  };
-
-  const handleTestKey = async () => {
-      if (!editForm.apiKey || editForm.apiKey.trim().length < 10) {
-          setKeyStatus('invalid');
-          return;
-      }
-      setKeyStatus('checking');
-      const isValid = await validateApiKey(editForm.apiKey.trim());
-      setKeyStatus(isValid ? 'valid' : 'invalid');
   };
 
   const triggerFullBackup = () => {
@@ -142,12 +128,8 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
 
       const printWindow = window.open('', '_blank');
       if (printWindow) {
-        // Generate Images Section HTML
         const imagesHtml = salesToPrint
-            .filter(s => {
-                const imgs = s.billImages || (s.billImage ? [s.billImage] : []);
-                return imgs.length > 0;
-            })
+            .filter(s => (s.billImages || (s.billImage ? [s.billImage] : [])).length > 0)
             .map(s => `
                 <div class="bill-group">
                     <h3 class="bill-date-header">Bills for ${s.date.split('-').reverse().join('/')}</h3>
@@ -176,17 +158,12 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                         th, td { border: 1px solid #e2e8f0; padding: 10px 12px; text-align: left; overflow: hidden; text-overflow: ellipsis; }
                         th { background-color: #f8fafc; font-weight: 700; color: #334155; text-transform: uppercase; font-size: 11px; letter-spacing: 0.05em; }
                         tr:nth-child(even) { background-color: #f9fafb; }
-                        
                         .section-title { font-size: 18px; font-weight: 800; color: #1e1b4b; margin: 40px 0 20px 0; border-left: 4px solid #6366f1; padding-left: 10px; page-break-before: always; }
                         .bill-group { margin-bottom: 30px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; page-break-inside: avoid; }
                         .bill-date-header { margin: 0 0 15px 0; font-size: 14px; font-weight: 700; color: #475569; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px; }
                         .bill-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
                         .bill-card { border: 1px solid #f1f5f9; border-radius: 8px; overflow: hidden; }
                         .bill-img { width: 100%; height: auto; max-height: 450px; object-fit: contain; display: block; }
-                        
-                        @media print {
-                            .bill-group { border-color: #eee; }
-                        }
                     </style>
                 </head>
                 <body>
@@ -219,22 +196,8 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                             `).join('')}
                         </tbody>
                     </table>
-
-                    ${imagesHtml ? `
-                        <h2 class="section-title">Bill Attachments</h2>
-                        <div class="images-container">
-                            ${imagesHtml}
-                        </div>
-                    ` : ''}
-
-                    <script>
-                        window.onload = () => {
-                            setTimeout(() => {
-                                window.print();
-                                // Optional: window.close();
-                            }, 1000);
-                        }
-                    </script>
+                    ${imagesHtml ? `<h2 class="section-title">Bill Attachments</h2><div class="images-container">${imagesHtml}</div>` : ''}
+                    <script>window.onload = () => { setTimeout(() => { window.print(); }, 1000); }</script>
                 </body>
             </html>
         `);
@@ -277,22 +240,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                         <label className="whitespace-nowrap text-sm text-slate-500 w-24 font-bold">Target (₹)</label>
                         <GlassInput type="number" value={editForm.monthlyTarget} onChange={e => setEditForm({...editForm, monthlyTarget: parseInt(e.target.value) || 0})} />
                     </div>
-                    <div className="pt-2 border-t border-dashed border-gray-300 dark:border-white/10 mt-2">
-                         <label className="text-xs text-slate-500 font-bold ml-1 flex items-center gap-1"><Key size={12}/> Gemini API Key</label>
-                         <div className="flex gap-2">
-                             <GlassInput 
-                                type="password"
-                                placeholder="Paste API key" 
-                                value={editForm.apiKey || ''} 
-                                onChange={e => {setEditForm({...editForm, apiKey: e.target.value}); setKeyStatus('idle');}} 
-                             />
-                             <button onClick={handleTestKey} className="px-3 rounded-xl border bg-white/40 active:scale-95 transition-transform">
-                                {keyStatus === 'checking' ? <Loader2 size={18} className="animate-spin" /> : 'Test'}
-                             </button>
-                         </div>
-                         {keyStatus === 'valid' && <p className="text-[10px] text-green-500 font-bold mt-1 ml-1 flex items-center gap-1"><ShieldCheck size={10}/> Key Validated!</p>}
-                    </div>
-                    <div className="flex gap-2 pt-2">
+                    <div className="flex gap-2 pt-4 border-t border-dashed border-gray-300 dark:border-white/10 mt-2">
                         <GlassButton onClick={handleSave} className="flex-1">Save Changes</GlassButton>
                         <GlassButton onClick={() => { setIsEditing(false); setEditForm(user); }} variant="secondary" className="flex-1">Cancel</GlassButton>
                     </div>
@@ -308,7 +256,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
             )}
         </GlassCard>
 
-        {/* Data Management Section */}
         <h3 className="font-bold text-lg px-2 flex items-center gap-2">
             <Database size={18} className="text-indigo-500" /> Data Management
         </h3>
@@ -317,24 +264,18 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
             <div className="flex items-center gap-3 p-3 bg-blue-50/50 dark:bg-blue-900/10 rounded-xl border border-blue-100/30">
                 <Info size={18} className="text-blue-500 shrink-0" />
                 <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
-                    Backups include your profile, sales history, store targets, and bill images. Restoring will replace all current data.
+                    Backups include your profile, sales history, and bill images. Restoring will replace all current local data.
                 </p>
             </div>
             
             <div className="grid grid-cols-2 gap-3">
-                <button 
-                    onClick={triggerFullBackup}
-                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all group"
-                >
+                <button onClick={triggerFullBackup} className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all group">
                     <div className="p-3 bg-indigo-50 dark:bg-indigo-900/30 rounded-full text-indigo-600 dark:text-indigo-400 group-hover:scale-110 transition-transform">
                         <Download size={24} />
                     </div>
                     <span className="text-xs font-black uppercase tracking-wider">Export JSON</span>
                 </button>
-                <button 
-                    onClick={handleRestoreClick}
-                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all group"
-                >
+                <button onClick={handleRestoreClick} className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-white dark:bg-zinc-800 border border-slate-100 dark:border-white/5 shadow-sm hover:shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all group">
                     <div className="p-3 bg-amber-50 dark:bg-amber-900/30 rounded-full text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
                         <Upload size={24} />
                     </div>
@@ -342,95 +283,39 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
                 </button>
             </div>
             
-            <input 
-                type="file" 
-                ref={fileInputRef} 
-                className="hidden" 
-                accept=".json" 
-                onChange={onFileChange} 
-            />
+            <input type="file" ref={fileInputRef} className="hidden" accept=".json" onChange={onFileChange} />
 
             <div className="pt-4 border-t border-gray-100 dark:border-white/5 space-y-3">
-                <div className="flex items-center justify-between px-1">
-                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Excel / PDF Export</label>
-                </div>
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest px-1">Excel / PDF Export</label>
                 <div className="flex gap-2">
-                    <input 
-                        type="month" 
-                        value={backupMonth}
-                        onChange={(e) => setBackupMonth(e.target.value)}
-                        className="flex-1 bg-slate-100 dark:bg-zinc-800/50 rounded-xl px-4 py-2 text-sm outline-none border border-transparent focus:border-indigo-500/30 transition-all"
-                    />
-                    <button 
-                        onClick={() => downloadCSV(getSales())} 
-                        className="px-4 bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-emerald-500/20 active:scale-95 transition-all"
-                    >
-                        CSV
-                    </button>
-                    <button 
-                        onClick={handlePrintView}
-                        className="px-4 bg-rose-500 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg shadow-rose-500/20 active:scale-95 transition-all"
-                    >
-                        PDF
-                    </button>
+                    <input type="month" value={backupMonth} onChange={(e) => setBackupMonth(e.target.value)} className="flex-1 bg-slate-100 dark:bg-zinc-800/50 rounded-xl px-4 py-2 text-sm outline-none border border-transparent focus:border-indigo-500/30 transition-all" />
+                    <button onClick={() => downloadCSV(getSales())} className="px-4 bg-emerald-500 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">CSV</button>
+                    <button onClick={handlePrintView} className="px-4 bg-rose-500 text-white rounded-xl text-xs font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all">PDF</button>
                 </div>
             </div>
         </GlassCard>
 
-        {/* Improved Restore Confirmation Modal */}
-        <Modal 
-            isOpen={showRestoreModal} 
-            onClose={() => setShowRestoreModal(false)}
-            title="Confirm Restore"
-        >
+        <Modal isOpen={showRestoreModal} onClose={() => setShowRestoreModal(false)} title="Confirm Restore">
             <div className="space-y-6 pt-2">
                 <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-200/50 flex gap-4">
                     <AlertTriangle size={32} className="text-amber-600 shrink-0" />
                     <div>
                         <h4 className="font-bold text-amber-900 dark:text-amber-200">Warning</h4>
-                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">
-                            Restoring will permanently delete all current records. This cannot be undone.
-                        </p>
+                        <p className="text-xs text-amber-700 dark:text-amber-400 mt-1">Restoring will permanently replace all current records. This cannot be undone.</p>
                     </div>
                 </div>
-
                 {restoreSummary && (
                     <div className="space-y-3 bg-slate-50 dark:bg-black/20 p-4 rounded-2xl border border-slate-100 dark:border-white/5">
                         <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Backup Summary</h5>
                         <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <p className="text-[10px] text-slate-500 uppercase font-bold">Owner</p>
-                                <p className="text-sm font-bold truncate">{restoreSummary.userName}</p>
-                            </div>
-                            <div>
-                                <p className="text-[10px] text-slate-500 uppercase font-bold">Generated On</p>
-                                <p className="text-[10px] font-bold">{restoreSummary.date}</p>
-                            </div>
-                            <div className="col-span-2 grid grid-cols-3 gap-2 pt-2 border-t border-slate-200 dark:border-white/10">
-                                <div className="text-center">
-                                    <p className="text-lg font-black text-indigo-500">{restoreSummary.salesCount}</p>
-                                    <p className="text-[8px] font-bold uppercase text-slate-500">Sales</p>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-lg font-black text-emerald-500">{restoreSummary.eodCount}</p>
-                                    <p className="text-[8px] font-bold uppercase text-slate-500">EODs</p>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-lg font-black text-rose-500">{restoreSummary.crmCount}</p>
-                                    <p className="text-[8px] font-bold uppercase text-slate-500">Tickets</p>
-                                </div>
-                            </div>
+                            <div><p className="text-[10px] text-slate-500 uppercase font-bold">Owner</p><p className="text-sm font-bold truncate">{restoreSummary.userName}</p></div>
+                            <div><p className="text-[10px] text-slate-500 uppercase font-bold">Date</p><p className="text-[10px] font-bold">{restoreSummary.date}</p></div>
                         </div>
                     </div>
                 )}
-
                 <div className="flex gap-3 pt-4">
-                    <GlassButton onClick={confirmRestore} className="flex-1 !bg-amber-600 !border-amber-400 hover:!bg-amber-700">
-                        Confirm & Restore
-                    </GlassButton>
-                    <GlassButton onClick={() => setShowRestoreModal(false)} variant="secondary" className="flex-1">
-                        Cancel
-                    </GlassButton>
+                    <GlassButton onClick={confirmRestore} className="flex-1 !bg-amber-600 !border-amber-400 hover:!bg-amber-700">Restore Now</GlassButton>
+                    <GlassButton onClick={() => setShowRestoreModal(false)} variant="secondary" className="flex-1">Cancel</GlassButton>
                 </div>
             </div>
         </Modal>
@@ -438,10 +323,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout }) => 
         <GlassButton variant="danger" onClick={onLogout} className="w-full py-4 text-sm uppercase tracking-widest">
             <LogOut size={18} /> Logout Session
         </GlassButton>
-        
-        <p className="text-center text-[10px] font-black text-slate-400 py-4 uppercase tracking-[0.3em] opacity-50">
-            System V5.5.0 • Atomic Restore Engine
-        </p>
     </div>
   );
 };

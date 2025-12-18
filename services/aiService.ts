@@ -1,103 +1,73 @@
-
-import { GoogleGenAI, Chat } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { UserProfile, DailyReport } from "../types";
-import { getUser } from "./storageService";
 
-// Helper to resolve key (User Setting > Env Var)
-const resolveApiKey = (user?: UserProfile | null): string => {
-    if (user && user.apiKey && user.apiKey.trim().length > 10) return user.apiKey.trim();
-    
-    const storedUser = getUser();
-    if (storedUser && storedUser.apiKey && storedUser.apiKey.trim().length > 10) return storedUser.apiKey.trim();
-    
+export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]) => {
     try {
-        // @ts-ignore
-        const envKey = process.env.API_KEY || '';
-        if (envKey.length > 10) return envKey;
-    } catch {
-        // Ignore env access
-    }
-    return '';
-};
-
-export const validateApiKey = async (apiKey: string): Promise<boolean> => {
-    try {
-        const ai = new GoogleGenAI({ apiKey });
-        {/* // FIX: Setting thinkingBudget to 0 when maxOutputTokens is 1 for a quick ping check */}
-        await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
-            contents: 'ping',
-            config: { maxOutputTokens: 1, thinkingConfig: { thinkingBudget: 0 } }
-        });
-        return true;
-    } catch (e) {
-        console.error("API Key Validation Failed:", e);
-        return false;
-    }
-};
-
-export const createSalesCoachChat = (user: UserProfile, sales: DailyReport[]): Chat | null => {
-    const key = resolveApiKey(user);
-    if (!key) return null;
-
-    try {
-        const ai = new GoogleGenAI({ apiKey: key });
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
-        const recentSales = sales
+        const recentSales = [...sales]
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-            .slice(0, 10);
+            .slice(0, 5);
+
+        const salesSummary = recentSales.map(s => 
+            `Date: ${s.date}, Total: ₹${s.totalValue}, Qty: ${s.totalQty}`
+        ).join('\n');
 
         const systemInstruction = `
             You are an expert Bajaj Electricals Sales Coach. 
             User: ${user.name} (${user.storeName}).
             
+            Recent Performance:
+            ${salesSummary || 'No recent sales recorded.'}
+
             Task:
             1. Analyze sales performance.
             2. Answer questions about Bajaj products (Mixers, Geysers, Irons).
-            3. Provide closing tips.
+            3. Provide closing tips for retail customers.
 
             Rules:
-            - Plain text only.
-            - Use Emojis.
-            - Be very concise.
+            - Response MUST be plain text only.
+            - Use relevant Emojis.
+            - Be concise and professional.
         `;
 
-        {/* // FIX: Added thinkingBudget as required by guidelines when setting maxOutputTokens */}
         return ai.chats.create({
             model: 'gemini-3-flash-preview',
             config: {
                 systemInstruction: systemInstruction,
-                maxOutputTokens: 300,
-                thinkingConfig: { thinkingBudget: 150 }
+                maxOutputTokens: 1000,
+                thinkingConfig: { thinkingBudget: 500 }
             }
         });
     } catch (e) {
+        console.error("Failed to create chat session:", e);
         return null;
     }
 };
 
 export const getMotivationalQuote = async (): Promise<string> => {
     try {
-        const key = resolveApiKey();
-        if (!key) throw new Error("No Key");
-        
-        const ai = new GoogleGenAI({ apiKey: key });
-        {/* // FIX: Added thinkingBudget to reserve tokens for output when maxOutputTokens is set */}
+        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
-            contents: 'Short powerful retail sales motivation quote. Max 10 words. Plain text.',
-            config: { maxOutputTokens: 30, thinkingConfig: { thinkingBudget: 15 } }
+            contents: 'Provide a short, powerful, one-sentence retail sales motivation quote (max 12 words) with an emoji.',
+            config: { 
+                maxOutputTokens: 100, 
+                thinkingConfig: { thinkingBudget: 50 } 
+            }
         });
         return response.text || "Success belongs to those who work for it. 🚀";
     } catch (error) {
+        console.error("Failed to fetch quote:", error);
         return "Your hard work today is your success tomorrow. 💪";
     }
 };
 
 export const getOfflineResponse = (query: string, user: UserProfile): string => {
     const lower = query.toLowerCase();
-    if (lower.includes('hello')) return `Hello ${user.name}! Offline mode is active. ⚡`;
-    if (lower.includes('mixer')) return "🔹 Bajaj GX Series: 500-750W. Duracut blades.";
-    if (lower.includes('geyser')) return "🔹 Bajaj storage geysers: Glassline tanks, 20% more hot water.";
-    return "I am in Offline Mode. Ask about Mixers, Geysers, or Irons! 🌐";
+    if (lower.includes('hello')) return `Hello ${user.name}! I'm currently in offline mode, but I can still share some basic product info. ⚡`;
+    if (lower.includes('mixer')) return "🔹 Bajaj GX Series: Feature 500-750W motors and Duracut blades for fine grinding.";
+    if (lower.includes('geyser')) return "🔹 Bajaj Storage Geysers: Feature Glassline-coated tanks and provide up to 20% more hot water.";
+    if (lower.includes('iron')) return "🔹 Bajaj Irons: Available in Dry and Steam variants with non-stick coated soleplates.";
+    return "I am currently operating in Offline Mode. Please check your internet connection for full AI coaching! 🌐";
 };

@@ -3,7 +3,6 @@ import { Home, PlusCircle, Users, Settings, Sun, Moon, Sparkles, Send, X, Clipbo
 import { Tab, UserProfile, DailyReport } from '../types';
 import { createSalesCoachChat, getOfflineResponse } from '../services/aiService';
 import { Modal } from './ui/GlassComponents';
-import { Chat } from '@google/genai';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -22,7 +21,7 @@ interface ChatMessage {
 
 const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDark, toggleTheme, user, salesData }) => {
   const [showCoach, setShowCoach] = useState(false);
-  const [chatSession, setChatSession] = useState<Chat | null>(null);
+  const [chatSession, setChatSession] = useState<any>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMsg, setInputMsg] = useState('');
   const [isTyping, setIsTyping] = useState(false);
@@ -51,34 +50,30 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
       if (!isDragging) setShowCoach(true);
   };
 
-  useEffect(() => {
-    setChatSession(null);
-    setMessages([]);
-  }, [user?.apiKey]);
-
+  // Initialize chat session only when modal opens and no session exists
   useEffect(() => {
     if (showCoach && !chatSession && user) {
-        try {
-            const chat = createSalesCoachChat(user, salesData);
-            if (chat) {
-                setChatSession(chat);
-                setIsTyping(true);
-                chat.sendMessage({ message: "Say hello!" })
-                    .then(res => {
-                        if (res.text) setMessages([{ role: 'model', text: res.text }]);
-                    })
-                    .catch(() => {
-                        setMessages([{ role: 'model', text: "Hello! Online mode issue, using offline fallback." }]);
-                    })
-                    .finally(() => setIsTyping(false));
+        const initChat = async () => {
+            setIsTyping(true);
+            const session = createSalesCoachChat(user, salesData);
+            if (session) {
+                setChatSession(session);
+                try {
+                    const res = await session.sendMessage({ message: "Say a quick hello to me!" });
+                    if (res.text) {
+                        setMessages([{ role: 'model', text: res.text }]);
+                    }
+                } catch (err) {
+                    setMessages([{ role: 'model', text: "Ready to coach you! How can I help today?" }]);
+                }
             } else {
-                 setMessages([{ role: 'model', text: "Ready to help in Offline Mode. Check API Key in Settings." }]);
+                setMessages([{ role: 'model', text: "AI service is currently unavailable. Using offline assistant." }]);
             }
-        } catch (e) {
-             setMessages([{ role: 'model', text: "Ready to help offline." }]);
-        }
+            setIsTyping(false);
+        };
+        initChat();
     }
-  }, [showCoach, user, salesData, chatSession]);
+  }, [showCoach, user]); // Only re-init if user changes or coach is toggled
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -87,6 +82,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
   const handleSendMessage = async (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!inputMsg.trim() || !user) return;
+    
     const userText = inputMsg;
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setInputMsg('');
@@ -95,8 +91,11 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
     try {
         if (!chatSession) throw new Error("Offline");
         const result = await chatSession.sendMessage({ message: userText });
-        if (result.text) setMessages(prev => [...prev, { role: 'model', text: result.text }]);
+        if (result.text) {
+            setMessages(prev => [...prev, { role: 'model', text: result.text }]);
+        }
     } catch (err) {
+        console.error("Chat error:", err);
         setTimeout(() => {
             const reply = getOfflineResponse(userText, user);
             setMessages(prev => [...prev, { role: 'model', text: reply }]);
@@ -183,7 +182,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
             <div className="pt-3 border-t border-gray-100 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
                 <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
                     <input value={inputMsg} onChange={e => setInputMsg(e.target.value)} placeholder="Ask anything..." className="flex-1 bg-white dark:bg-zinc-800 border rounded-full px-4 py-2.5 text-sm" />
-                    <button type="submit" className="p-2.5 bg-black dark:bg-white text-white dark:text-black rounded-full shadow-lg"><Send size={18} /></button>
+                    <button type="submit" className="p-2.5 bg-black dark:bg-white text-white dark:text-black rounded-full shadow-lg transition-transform active:scale-90"><Send size={18} /></button>
                 </form>
             </div>
         </div>
