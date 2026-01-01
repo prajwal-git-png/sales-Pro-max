@@ -1,3 +1,4 @@
+
 import { DailyReport, UserProfile, SaleItem } from "../types";
 import { getSales } from "./storageService";
 
@@ -10,8 +11,8 @@ export const formatToDisplayDate = (dateStr: string) => {
   return `${day}/${month}/${year}`;
 };
 
-export const generateTextReport = (user: UserProfile, report: DailyReport) => {
-  const allSales = getSales();
+// Fix: Passed allSales as a parameter to avoid calling filter on a Promise
+export const generateTextReport = (user: UserProfile, report: DailyReport, allSales: DailyReport[]) => {
   
   // Calculate MTD
   const currentMonth = new Date(report.date).getMonth();

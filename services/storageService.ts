@@ -1,75 +1,121 @@
 import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry } from '../types';
 
-const KEYS = {
+const DB_NAME = 'SalesTrackDB';
+const DB_VERSION = 1;
+const STORES = {
+  SALES: 'sales',
+  EOD: 'eod',
+  CRM: 'crm'
+};
+
+const LS_KEYS = {
   USER: 'app_user_profile',
-  SALES: 'app_sales_data',
-  EOD: 'app_eod_data',
-  CRM: 'app_crm_data',
   THEME: 'app_theme_mode',
 };
 
-// --- Helpers ---
-const getJSON = <T>(key: string): T | null => {
-  try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : null;
-  } catch (e) {
-    console.error(`Error reading ${key}`, e);
-    return null;
-  }
+// --- IndexedDB Wrapper ---
+const openDB = (): Promise<IDBDatabase> => {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORES.SALES)) db.createObjectStore(STORES.SALES, { keyPath: 'date' });
+      if (!db.objectStoreNames.contains(STORES.EOD)) db.createObjectStore(STORES.EOD, { keyPath: 'date' });
+      if (!db.objectStoreNames.contains(STORES.CRM)) db.createObjectStore(STORES.CRM, { keyPath: 'id' });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 };
 
-const setJSON = (key: string, value: any) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (e) {
-    console.error(`Error saving ${key}`, e);
-    // If we hit quota, try to inform the user
-    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22)) {
-      alert('Local storage limit reached. Please delete old reports with many high-quality images to save more data.');
-      throw new Error('Storage limit reached.');
-    }
-    throw e;
-  }
+const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readonly');
+    const store = transaction.objectStore(storeName);
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 };
 
-// --- User ---
-export const getUser = (): UserProfile | null => getJSON<UserProfile>(KEYS.USER);
-export const saveUser = (user: UserProfile) => setJSON(KEYS.USER, user);
+const putToStore = async <T>(storeName: string, data: T): Promise<void> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const request = store.put(data);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const deleteFromStore = async (storeName: string, key: string): Promise<void> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const request = store.delete(key);
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+const clearStore = async (storeName: string): Promise<void> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readwrite');
+    const store = transaction.objectStore(storeName);
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
+// --- User & Theme (Small data remains in LS for sync access) ---
+export const getUser = (): UserProfile | null => {
+  const item = localStorage.getItem(LS_KEYS.USER);
+  return item ? JSON.parse(item) : null;
+};
+export const saveUser = (user: UserProfile) => {
+  localStorage.setItem(LS_KEYS.USER, JSON.stringify(user));
+};
 export const logoutUser = () => {
-    localStorage.removeItem(KEYS.USER);
+  localStorage.removeItem(LS_KEYS.USER);
 };
 
-// --- Sales (Detailed Brand Sales) ---
-export const getSales = (): DailyReport[] => getJSON<DailyReport[]>(KEYS.SALES) || [];
+export const getTheme = (): 'light' | 'dark' => (localStorage.getItem(LS_KEYS.THEME) as 'light' | 'dark') || 'light';
+export const saveTheme = (theme: 'light' | 'dark') => localStorage.setItem(LS_KEYS.THEME, theme);
 
-export const saveSaleEntry = (date: string, newItems: SaleItem[], newBillImages: string[] = []) => {
-  const sales = getSales();
-  const existingIndex = sales.findIndex((s) => s.date === date);
+// --- Sales ---
+export const getSales = (): Promise<DailyReport[]> => getAllFromStore<DailyReport>(STORES.SALES);
+
+export const saveSaleEntry = async (date: string, newItems: SaleItem[], newBillImages: string[] = []) => {
+  const sales = await getSales();
+  const existing = sales.find(s => s.date === date);
 
   const calculateTotals = (items: SaleItem[]) => ({
     totalQty: items.reduce((acc, item) => acc + item.quantity, 0),
     totalValue: items.reduce((acc, item) => acc + (item.price * item.quantity), 0),
   });
 
-  if (existingIndex > -1) {
-    const existing = sales[existingIndex];
+  if (existing) {
     const updatedItems = [...existing.items, ...newItems];
     const { totalQty, totalValue } = calculateTotals(updatedItems);
     const existingImages = existing.billImages || (existing.billImage ? [existing.billImage] : []);
     const mergedImages = [...existingImages, ...newBillImages];
 
-    sales[existingIndex] = {
+    await putToStore(STORES.SALES, {
       ...existing,
       items: updatedItems,
       totalQty,
       totalValue,
       billImages: mergedImages,
       billImage: undefined,
-    };
+    });
   } else {
     const { totalQty, totalValue } = calculateTotals(newItems);
-    sales.push({
+    await putToStore(STORES.SALES, {
       date,
       items: newItems,
       totalQty,
@@ -77,63 +123,33 @@ export const saveSaleEntry = (date: string, newItems: SaleItem[], newBillImages:
       billImages: newBillImages,
     });
   }
-  setJSON(KEYS.SALES, sales);
 };
 
-export const updateDailyReport = (date: string, updatedReport: DailyReport) => {
-    const sales = getSales();
-    const index = sales.findIndex(s => s.date === date);
-    if (index > -1) {
-        sales[index] = updatedReport;
-        setJSON(KEYS.SALES, sales);
-    }
+export const updateDailyReport = async (date: string, updatedReport: DailyReport) => {
+  await putToStore(STORES.SALES, updatedReport);
 };
 
-export const deleteDailyReport = (date: string) => {
-    const sales = getSales();
-    const filtered = sales.filter(s => s.date !== date);
-    setJSON(KEYS.SALES, filtered);
+export const deleteDailyReport = async (date: string) => {
+  await deleteFromStore(STORES.SALES, date);
 };
 
-// --- Store EOD (Manual Store Achievement) ---
-export const getEODEntries = (): StoreEODEntry[] => getJSON<StoreEODEntry[]>(KEYS.EOD) || [];
-
-export const saveEODEntry = (entry: StoreEODEntry) => {
-    const entries = getEODEntries();
-    const index = entries.findIndex(e => e.date === entry.date);
-    if (index > -1) {
-        entries[index] = entry;
-    } else {
-        entries.push(entry);
-    }
-    setJSON(KEYS.EOD, entries);
+// --- EOD ---
+export const getEODEntries = (): Promise<StoreEODEntry[]> => getAllFromStore<StoreEODEntry>(STORES.EOD);
+export const saveEODEntry = async (entry: StoreEODEntry) => {
+  await putToStore(STORES.EOD, entry);
 };
-
-export const deleteEODEntry = (date: string) => {
-    const entries = getEODEntries();
-    const filtered = entries.filter(e => e.date !== date);
-    setJSON(KEYS.EOD, filtered);
+export const deleteEODEntry = async (date: string) => {
+  await deleteFromStore(STORES.EOD, date);
 };
 
 // --- CRM ---
-export const getComplaints = (): Complaint[] => getJSON<Complaint[]>(KEYS.CRM) || [];
-export const saveComplaint = (complaint: Complaint) => {
-  const list = getComplaints();
-  list.unshift(complaint);
-  setJSON(KEYS.CRM, list);
+export const getComplaints = (): Promise<Complaint[]> => getAllFromStore<Complaint>(STORES.CRM);
+export const saveComplaint = async (complaint: Complaint) => {
+  await putToStore(STORES.CRM, complaint);
 };
-export const updateComplaint = (updated: Complaint) => {
-    const list = getComplaints();
-    const index = list.findIndex(c => c.id === updated.id);
-    if (index > -1) {
-        list[index] = updated;
-        setJSON(KEYS.CRM, list);
-    }
-}
-
-// --- Theme ---
-export const getTheme = (): 'light' | 'dark' => (localStorage.getItem(KEYS.THEME) as 'light' | 'dark') || 'light';
-export const saveTheme = (theme: 'light' | 'dark') => localStorage.setItem(KEYS.THEME, theme);
+export const updateComplaint = async (updated: Complaint) => {
+  await putToStore(STORES.CRM, updated);
+};
 
 // --- Backup & Restore ---
 export interface BackupPackage {
@@ -149,52 +165,53 @@ export interface BackupPackage {
   }
 }
 
-export const exportFullBackup = (): string => {
+export const exportFullBackup = async (): Promise<string> => {
   const packageData: BackupPackage = {
     app: 'SalesTrack',
-    version: '6.0.0',
+    version: '7.0.0',
     timestamp: new Date().toISOString(),
     data: {
-      user: getJSON<UserProfile>(KEYS.USER),
-      sales: getSales(),
-      eod: getEODEntries(),
-      crm: getComplaints(),
-      theme: localStorage.getItem(KEYS.THEME) || 'light'
+      user: getUser(),
+      sales: await getSales(),
+      eod: await getEODEntries(),
+      crm: await getComplaints(),
+      theme: localStorage.getItem(LS_KEYS.THEME) || 'light'
     }
   };
   return JSON.stringify(packageData);
 };
 
-export const importFullBackup = (jsonString: string): { success: boolean; message: string } => {
+export const importFullBackup = async (jsonString: string): Promise<{ success: boolean; message: string }> => {
   try {
     const parsed = JSON.parse(jsonString);
     if (parsed.app !== 'SalesTrack' || !parsed.data) {
-      return { success: false, message: 'Invalid file format. Please use a SalesTrack backup file.' };
+      return { success: false, message: 'Invalid file format.' };
     }
     const { user, sales, eod, crm, theme } = parsed.data;
-    localStorage.clear();
-    if (user) setJSON(KEYS.USER, user);
-    if (sales) setJSON(KEYS.SALES, sales);
-    if (eod) setJSON(KEYS.EOD, eod);
-    if (crm) setJSON(KEYS.CRM, crm);
-    if (theme) localStorage.setItem(KEYS.THEME, theme);
+    
+    // Clear all
+    localStorage.removeItem(LS_KEYS.USER);
+    await clearStore(STORES.SALES);
+    await clearStore(STORES.EOD);
+    await clearStore(STORES.CRM);
+
+    if (user) saveUser(user);
+    if (sales) for (const s of sales) await putToStore(STORES.SALES, s);
+    if (eod) for (const e of eod) await putToStore(STORES.EOD, e);
+    if (crm) for (const c of crm) await putToStore(STORES.CRM, c);
+    if (theme) saveTheme(theme as 'light' | 'dark');
+
     return { success: true, message: 'Backup restored successfully!' };
   } catch (e: any) {
-    console.error("Restore failed:", e);
-    return { success: false, message: `Restore failed: ${e.message || 'Unknown error'}` };
+    return { success: false, message: `Restore failed: ${e.message}` };
   }
 };
 
-// --- Utils ---
 export const compressImage = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.readAsDataURL(file);
-        reader.onload = (event) => {
-            // Instruciton: Don't compress image quality, use original size.
-            // We directly return the data URL which is a Base64 representation of the original file.
-            resolve(event.target?.result as string);
-        };
-        reader.onerror = error => reject(error);
-    });
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => resolve(event.target?.result as string);
+    reader.onerror = error => reject(error);
+  });
 };

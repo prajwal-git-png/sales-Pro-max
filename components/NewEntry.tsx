@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Image as ImageIcon, RefreshCcw } from 'lucide-react';
 import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
@@ -5,7 +6,6 @@ import { SaleItem, UserProfile } from '../types';
 import { saveSaleEntry, compressImage, getSales } from '../services/storageService';
 import { generateTextReport, formatToDisplayDate } from '../services/reportService';
 
-// --- Product Data Constant ---
 const PRODUCT_LIST = [
     "BAJAJ MIXER GRINDER GX15 500W",
     "BAJAJ MIXER 500W 3JARS GRACIO LILAC",
@@ -73,13 +73,10 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
     { id: '1', productName: '', quantity: 1, price: 0 }
   ]);
   const [inputModes, setInputModes] = useState<('unit'|'total')[]>(['unit']);
-
   const [billImages, setBillImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-
   const [isWeekOff, setIsWeekOff] = useState(false);
-
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -97,7 +94,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
     const newItems = [...items];
     newItems.splice(index, 1);
     setItems(newItems);
-    
     const newModes = [...inputModes];
     newModes.splice(index, 1);
     setInputModes(newModes);
@@ -112,7 +108,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   const updatePrice = (index: number, value: number) => {
       const mode = inputModes[index];
       const qty = items[index].quantity || 1;
-      
       if (mode === 'total') {
           updateItem(index, 'price', value / qty);
       } else {
@@ -149,37 +144,29 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
       setBillImages(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (isWeekOff) {
         if(confirm("Mark " + formatToDisplayDate(date) + " as Week Off?")) {
             setIsSubmitting(true);
-            setTimeout(() => {
-                const sales = getSales();
-                const existingIndex = sales.findIndex(s => s.date === date);
-                if(existingIndex > -1) {
-                     sales[existingIndex] = {
-                         ...sales[existingIndex],
-                         isWeekOff: true,
-                         items: [],
-                         totalQty: 0,
-                         totalValue: 0
-                     }
-                } else {
-                    sales.push({
-                        date,
-                        items: [],
-                        totalQty: 0,
-                        totalValue: 0,
-                        isWeekOff: true
-                    });
-                }
-                localStorage.setItem('app_sales_data', JSON.stringify(sales));
+            const sales = await getSales();
+            const existing = sales.find(s => s.date === date);
+            const updatedReport = {
+              date,
+              items: [],
+              totalQty: 0,
+              totalValue: 0,
+              isWeekOff: true,
+              billImages: existing?.billImages || []
+            };
+            await saveSaleEntry(date, [], []); // Basic save for weekoff
+            // We use the direct storage call to force weekoff status
+            const { updateDailyReport } = await import('../services/storageService');
+            await updateDailyReport(date, updatedReport);
 
-                setIsSubmitting(false);
-                setShowSuccessModal(true);
-            }, 500);
+            setIsSubmitting(false);
+            setShowSuccessModal(true);
         }
         return;
     }
@@ -187,33 +174,32 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
     if (billImages.length === 0 && !confirm("Save without bill image?")) return;
     
     setIsSubmitting(true);
-    setTimeout(() => {
-        saveSaleEntry(date, items, billImages);
-        setIsSubmitting(false);
-        setShowSuccessModal(true);
-    }, 500);
+    await saveSaleEntry(date, items, billImages);
+    setIsSubmitting(false);
+    setShowSuccessModal(true);
   };
 
-  const handleShareWhatsApp = () => {
-      if(isWeekOff) return;
-      const allSales = getSales();
+  const handleShareWhatsApp = async () => {
+      const allSales = await getSales();
       const report = allSales.find(s => s.date === date);
       if (report) {
-          const text = generateTextReport(user, report);
+          // Fix: Pass allSales as 3rd argument
+          const text = generateTextReport(user, report, allSales);
           window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
       }
   };
 
-  const handleCopyText = () => {
+  const handleCopyText = async () => {
       if(isWeekOff) {
           navigator.clipboard.writeText(`Name: ${user.name}\nDate: ${formatToDisplayDate(date)}\nStatus: Week Off`);
           alert('Week Off report copied');
           return;
       }
-      const allSales = getSales();
+      const allSales = await getSales();
       const report = allSales.find(s => s.date === date);
       if (report) {
-          const text = generateTextReport(user, report);
+          // Fix: Pass allSales as 3rd argument
+          const text = generateTextReport(user, report, allSales);
           navigator.clipboard.writeText(text);
           alert('Report copied!');
       }
@@ -230,7 +216,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   };
 
   const totalValue = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-
   const formattedDate = formatToDisplayDate(date);
 
   return (
@@ -281,19 +266,13 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
             
             {items.map((item, index) => {
               const mode = inputModes[index];
-              const displayPrice = mode === 'total' 
-                  ? (item.price * item.quantity)
-                  : item.price;
+              const displayPrice = mode === 'total' ? (item.price * item.quantity) : item.price;
               const calculatedTotal = item.price * item.quantity;
 
               return (
               <div key={item.id} className="relative bg-white/40 dark:bg-zinc-900/40 backdrop-blur-xl rounded-2xl border border-white/30 dark:border-white/10 shadow-sm animate-in zoom-in-95 duration-200 overflow-hidden">
                 {items.length > 1 && (
-                    <button 
-                        type="button" 
-                        onClick={() => removeItem(index)}
-                        className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-500 rounded-full shadow-md hover:bg-red-200 transition-colors z-10"
-                    >
+                    <button type="button" onClick={() => removeItem(index)} className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center bg-red-100 dark:bg-red-900/30 text-red-500 rounded-full shadow-md hover:bg-red-200 transition-colors z-10">
                         <Trash2 size={14} />
                     </button>
                 )}
@@ -302,13 +281,8 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                     <div className="space-y-1.5 relative z-20">
                         <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Product Model</label>
                         <div className="relative">
-                            <div 
-                                className="flex items-center justify-between w-full bg-white/50 dark:bg-black/20 border border-white/20 dark:border-white/5 rounded-xl px-4 py-3 cursor-pointer hover:bg-white/70 transition-colors"
-                                onClick={() => {
-                                    setActiveSearchIndex(index);
-                                    setSearchTerm(item.productName);
-                                }}
-                            >
+                            <div className="flex items-center justify-between w-full bg-white/50 dark:bg-black/20 border border-white/20 dark:border-white/5 rounded-xl px-4 py-3 cursor-pointer hover:bg-white/70 transition-colors"
+                                onClick={() => { setActiveSearchIndex(index); setSearchTerm(item.productName); }}>
                                 <span className={`text-sm font-medium ${!item.productName && 'text-slate-400 italic'}`}>
                                     {item.productName || 'Select Product...'}
                                 </span>
@@ -320,85 +294,45 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                                     <div className="p-2 border-b border-gray-100 dark:border-white/5 sticky top-0 bg-white/90 dark:bg-zinc-900/90 backdrop-blur">
                                         <div className="flex items-center gap-2 bg-gray-100 dark:bg-black/40 rounded-lg px-3 py-1.5">
                                             <Search size={14} className="text-gray-400" />
-                                            <input 
-                                                autoFocus
-                                                className="w-full py-1 text-sm outline-none bg-transparent"
-                                                placeholder="Search model..."
-                                                value={searchTerm}
-                                                onChange={e => setSearchTerm(e.target.value)}
-                                            />
+                                            <input autoFocus className="w-full py-1 text-sm outline-none bg-transparent" placeholder="Search model..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                                             {searchTerm && <X size={14} className="text-gray-400 cursor-pointer" onClick={() => setSearchTerm('')} />}
                                         </div>
                                     </div>
                                     <div className="overflow-y-auto custom-scrollbar">
                                         {filteredProducts.map(p => (
-                                            <div 
-                                                key={p} 
-                                                className="px-4 py-3 text-sm hover:bg-blue-50 dark:hover:bg-white/10 cursor-pointer border-b border-gray-50 dark:border-white/5 last:border-0"
-                                                onClick={() => handleProductSelect(index, p)}
-                                            >
+                                            <div key={p} className="px-4 py-3 text-sm hover:bg-blue-50 dark:hover:bg-white/10 cursor-pointer border-b border-gray-50 dark:border-white/5 last:border-0" onClick={() => handleProductSelect(index, p)}>
                                                 {p}
                                             </div>
                                         ))}
                                     </div>
                                 </div>
                             )}
-                            {activeSearchIndex === index && (
-                                <div className="fixed inset-0 z-40 bg-black/5" onClick={() => setActiveSearchIndex(null)} />
-                            )}
+                            {activeSearchIndex === index && <div className="fixed inset-0 z-40 bg-black/5" onClick={() => setActiveSearchIndex(null)} />}
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Quantity</label>
-                            <input 
-                                type="number"
-                                min="1"
-                                className="w-full bg-white/50 dark:bg-black/20 border-b-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 rounded-t-lg px-3 py-2.5 text-center font-mono text-lg font-semibold outline-none transition-all h-12"
-                                value={item.quantity}
-                                onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)}
-                                required
-                            />
+                            <input type="number" min="1" className="w-full bg-white/50 dark:bg-black/20 border-b-2 border-slate-200 dark:border-slate-700 focus:border-blue-500 rounded-t-lg px-3 py-2.5 text-center font-mono text-lg font-semibold outline-none transition-all h-12" value={item.quantity} onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)} required />
                         </div>
 
                         <div className="space-y-1.5 relative">
-                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">
-                                {mode === 'total' ? 'Total Amt' : 'Unit Price'}
-                            </label>
+                             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">{mode === 'total' ? 'Total Amt' : 'Unit Price'}</label>
                             <div className="relative">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-medium z-10">₹</span>
-                                <input 
-                                    type="number"
-                                    min="0"
-                                    step="any"
-                                    className={`w-full bg-white/50 dark:bg-black/20 border-b-2 rounded-t-lg pl-8 pr-3 py-2.5 font-mono text-lg font-semibold outline-none transition-all h-12 ${
-                                        mode === 'total' ? 'border-purple-300 focus:border-purple-500 text-purple-700 dark:text-purple-300' : 'border-slate-200 dark:border-slate-700 focus:border-blue-500'
-                                    }`}
-                                    value={displayPrice || ''}
-                                    onChange={e => updatePrice(index, parseFloat(e.target.value) || 0)}
-                                    required
-                                />
+                                <input type="number" min="0" step="any" className={`w-full bg-white/50 dark:bg-black/20 border-b-2 rounded-t-lg pl-8 pr-3 py-2.5 font-mono text-lg font-semibold outline-none transition-all h-12 ${mode === 'total' ? 'border-purple-300 focus:border-purple-500 text-purple-700 dark:text-purple-300' : 'border-slate-200 dark:border-slate-700 focus:border-blue-500'}`} value={displayPrice || ''} onChange={e => updatePrice(index, parseFloat(e.target.value) || 0)} required />
                             </div>
                         </div>
                     </div>
                 </div>
 
                 <div className="bg-slate-50/50 dark:bg-black/30 border-t border-white/20 dark:border-white/5 p-3 flex justify-between items-center">
-                    <div className="text-xs text-slate-500 dark:text-slate-400 font-medium px-2">
-                        Total: <span className="text-slate-800 dark:text-white font-bold ml-1">₹{calculatedTotal.toLocaleString()}</span>
-                    </div>
-                    
-                    <button 
-                        type="button" 
-                        onClick={() => togglePriceMode(index)}
-                        className="text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors shadow-sm"
-                    >
-                        <RefreshCcw size={10} className={mode === 'total' ? 'text-purple-500' : ''} />
-                        {mode === 'total' ? 'Unit Price' : 'Total Amount'}
+                    <div className="text-xs text-slate-500 dark:text-slate-400 font-medium px-2">Total: <span className="text-slate-800 dark:text-white font-bold ml-1">₹{calculatedTotal.toLocaleString()}</span></div>
+                    <button type="button" onClick={() => togglePriceMode(index)} className="text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-zinc-800 border border-slate-200 dark:border-zinc-700 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-zinc-700 transition-colors shadow-sm">
+                        <RefreshCcw size={10} className={mode === 'total' ? 'text-purple-500' : ''} /> {mode === 'total' ? 'Unit Price' : 'Total Amount'}
                     </button>
                 </div>
-
               </div>
             )})}
           </div>
@@ -429,11 +363,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                     {billImages.map((img, idx) => (
                         <div key={idx} className="relative flex-shrink-0 w-24 h-32 snap-start group">
                             <img src={img} alt={`Bill ${idx}`} className="w-full h-full object-cover rounded-xl border border-slate-200 dark:border-white/10 shadow-sm" />
-                            <button 
-                                type="button"
-                                onClick={() => removeImage(idx)}
-                                className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
-                            >
+                            <button type="button" onClick={() => removeImage(idx)} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
                                 <X size={12} />
                             </button>
                         </div>
@@ -456,44 +386,19 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
       </form>
     </div>
 
-    <Modal 
-        isOpen={showSuccessModal} 
-        onClose={resetForm} 
-        title={isWeekOff ? "Week Off Recorded" : "Entry Saved!"}
-    >
+    <Modal isOpen={showSuccessModal} onClose={resetForm} title={isWeekOff ? "Week Off Recorded" : "Entry Saved!"}>
         <div className="text-center space-y-6 pt-4">
             <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto shadow-xl ${isWeekOff ? 'bg-gray-100 text-gray-500' : 'bg-gradient-to-tr from-green-400 to-emerald-600 text-white'}`}>
                 {isWeekOff ? <Check size={40} /> : <Check size={40} strokeWidth={3} />}
             </div>
-            <p className="text-slate-600 dark:text-slate-300 font-medium">
-                {isWeekOff 
-                    ? `Marked ${formattedDate} as Week Off.` 
-                    : `Data added to cumulative report for ${formattedDate}.`
-                }
-            </p>
-            
+            <p className="text-slate-600 dark:text-slate-300 font-medium">{isWeekOff ? `Marked ${formattedDate} as Week Off.` : `Data added to cumulative report for ${formattedDate}.`}</p>
             {!isWeekOff && (
             <div className="grid grid-cols-2 gap-4">
-                <button 
-                    onClick={handleShareWhatsApp}
-                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 transition-all border border-[#25D366]/20 hover:scale-[1.02]"
-                >
-                    <Send size={24} />
-                    <span className="font-bold text-sm">WhatsApp</span>
-                </button>
-                <button 
-                    onClick={handleCopyText}
-                    className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all border border-blue-500/20 hover:scale-[1.02]"
-                >
-                    <Copy size={24} />
-                    <span className="font-bold text-sm">Copy</span>
-                </button>
+                <button onClick={handleShareWhatsApp} className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 transition-all border border-[#25D366]/20 hover:scale-[1.02]"><Send size={24} /><span className="font-bold text-sm">WhatsApp</span></button>
+                <button onClick={handleCopyText} className="flex flex-col items-center justify-center gap-2 p-4 rounded-2xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all border border-blue-500/20 hover:scale-[1.02]"><Copy size={24} /><span className="font-bold text-sm">Copy</span></button>
             </div>
             )}
-
-            <GlassButton onClick={resetForm} variant="secondary" className="w-full">
-                Close & New Entry
-            </GlassButton>
+            <GlassButton onClick={resetForm} variant="secondary" className="w-full">Close & New Entry</GlassButton>
         </div>
     </Modal>
     </>

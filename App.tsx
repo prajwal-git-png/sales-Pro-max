@@ -17,20 +17,26 @@ const App = () => {
   const [isDark, setIsDark] = useState(false);
 
   useEffect(() => {
-    const savedTheme = getTheme();
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-      setIsDark(true);
-      document.documentElement.classList.add('dark');
-    }
+    const initApp = async () => {
+      const savedTheme = getTheme();
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
+        setIsDark(true);
+        document.documentElement.classList.add('dark');
+      }
 
-    const storedUser = getUser();
-    if (storedUser) {
-      setUser(storedUser);
-      setSalesData(getSales());
-    }
-    // Sophisticated splash timeout - slightly longer for aesthetic reveal
-    setTimeout(() => setIsLoading(false), 2600);
+      const storedUser = getUser();
+      if (storedUser) {
+        setUser(storedUser);
+        const storedSales = await getSales();
+        setSalesData(storedSales);
+      }
+      
+      // Sophisticated splash timeout
+      setTimeout(() => setIsLoading(false), 2600);
+    };
+
+    initApp();
   }, []);
 
   const toggleTheme = () => {
@@ -43,6 +49,7 @@ const App = () => {
 
   const handleLogin = (newUser: UserProfile) => {
     setUser(newUser);
+    refreshData();
   };
 
   const handleLogout = () => {
@@ -50,19 +57,18 @@ const App = () => {
     setUser(null);
   };
 
-  const refreshData = () => {
-    setSalesData(getSales());
+  const refreshData = async () => {
+    const storedSales = await getSales();
+    setSalesData(storedSales);
   };
 
   if (isLoading) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-white dark:bg-black transition-colors duration-1000 overflow-hidden">
-        {/* Animated background blobs */}
         <div className="absolute top-[-15%] left-[-10%] w-[110vw] h-[110vw] bg-indigo-500/10 rounded-full blur-[140px] animate-float opacity-40" />
         <div className="absolute bottom-[-15%] right-[-10%] w-[90vw] h-[90vw] bg-purple-500/10 rounded-full blur-[140px] animate-float opacity-40" style={{ animationDelay: '-3s' }} />
 
         <div className="relative z-10 flex flex-col items-center gap-12 animate-reveal">
-          {/* iOS Style Minimalist Icon */}
           <div className="relative w-28 h-28">
             <div className="absolute inset-0 bg-black/10 dark:bg-white/10 blur-2xl scale-110 rounded-full" />
             <div className="relative h-full w-full bg-black dark:bg-white rounded-[24%] shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex items-center justify-center">
@@ -76,8 +82,6 @@ const App = () => {
             <h1 className="text-4xl font-extrabold tracking-tighter text-zinc-900 dark:text-white">
               SalesTrack
             </h1>
-            
-            {/* Elegant iOS Activity Indicator */}
             <div className="relative w-8 h-8">
               {[...Array(12)].map((_, i) => (
                 <div 
