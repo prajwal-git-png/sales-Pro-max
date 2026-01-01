@@ -46,7 +46,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
 
   useEffect(() => {
     if (showCoach && messages.length === 0 && user) {
-        setMessages([{ role: 'model', text: `Hi ${user.name.split(' ')[0]}! I'm your Bajaj Sales Coach. How can I help you close more deals today? 🚀` }]);
+        setMessages([{ role: 'model', text: `Hi ${user.name.split(' ')[0]}! I'm your Bajaj Sales Coach. How's the market today? 🚀` }]);
     }
   }, [showCoach, user]);
 
@@ -59,19 +59,29 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
     if (!inputMsg.trim() || !user || isTyping) return;
     
     const userText = inputMsg;
+    // Update UI immediately
     setMessages(prev => [...prev, { role: 'user', text: userText }]);
     setInputMsg('');
     setIsTyping(true);
 
     try {
+        // Send previous history (excluding the one we just added to UI to avoid state lag issues)
         const reply = await sendCoachMessage(user, salesData, messages, userText);
         setMessages(prev => [...prev, { role: 'model', text: reply }]);
-    } catch (err) {
-        console.error("Chat Error, falling back to offline:", err);
+    } catch (err: any) {
+        console.error("AI Coach Error:", err);
+        let errorMsg = "I'm having a connection hiccup. Using my offline brain... 🧠";
+        
+        if (err.message === "RATE_LIMIT") {
+            errorMsg = "Whoa! Too many questions. Let's take a 1-minute breather! ⏱️";
+        } else if (err.message === "API_KEY_MISSING") {
+            errorMsg = "Sales Coach configuration is missing. Please contact support. 🛠️";
+        }
+
         setTimeout(() => {
-            const reply = getOfflineResponse(userText, user);
-            setMessages(prev => [...prev, { role: 'model', text: reply }]);
-        }, 800);
+            const fallback = getOfflineResponse(userText, user);
+            setMessages(prev => [...prev, { role: 'model', text: `${errorMsg}\n\nCoach Tip: ${fallback}` }]);
+        }, 600);
     } finally {
         setIsTyping(false);
     }
@@ -139,15 +149,15 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
 
       <Modal isOpen={showCoach} onClose={() => setShowCoach(false)} title="Sales Coach AI">
         <div className="flex flex-col h-[60vh] sm:h-[500px]">
-            <div className="flex-1 overflow-y-auto space-y-4 px-1 pb-4">
+            <div className="flex-1 overflow-y-auto space-y-4 px-1 pb-4 scrollbar-hide">
                 {messages.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-zinc-900 text-white rounded-tr-sm' : 'bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 border border-gray-100 dark:border-white/10 rounded-tl-sm'}`}>
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}>
+                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-zinc-900 text-white rounded-tr-sm' : 'bg-white dark:bg-zinc-800 text-slate-700 dark:text-slate-200 border border-gray-100 dark:border-white/10 rounded-tl-sm shadow-sm'}`}>
                             {msg.text}
                         </div>
                     </div>
                 ))}
-                {isTyping && <div className="flex justify-start animate-pulse"><div className="bg-gray-100 dark:bg-zinc-800 px-4 py-3 rounded-2xl">Coach is thinking...</div></div>}
+                {isTyping && <div className="flex justify-start animate-pulse"><div className="bg-gray-100 dark:bg-zinc-800 px-4 py-3 rounded-2xl text-xs text-slate-400">Coach is thinking...</div></div>}
                 <div ref={messagesEndRef} />
             </div>
             <div className="pt-3 border-t border-gray-100 bg-white/50 dark:bg-black/20 backdrop-blur-sm">
@@ -155,13 +165,13 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
                     <input 
                       value={inputMsg} 
                       onChange={e => setInputMsg(e.target.value)} 
-                      placeholder="Ask for sales tips..." 
-                      className="flex-1 bg-white dark:bg-zinc-800 border rounded-full px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20" 
+                      placeholder="Ask your coach..." 
+                      className="flex-1 bg-white dark:bg-zinc-800 border rounded-full px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-white/10" 
                     />
                     <button 
                       type="submit" 
-                      disabled={isTyping}
-                      className="p-2.5 bg-black dark:bg-white text-white dark:text-black rounded-full shadow-lg transition-transform active:scale-90 disabled:opacity-50"
+                      disabled={isTyping || !inputMsg.trim()}
+                      className="p-2.5 bg-black dark:bg-white text-white dark:text-black rounded-full shadow-lg transition-transform active:scale-90 disabled:opacity-30"
                     >
                       <Send size={18} />
                     </button>

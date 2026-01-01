@@ -25,8 +25,9 @@ const setJSON = (key: string, value: any) => {
   } catch (e) {
     console.error(`Error saving ${key}`, e);
     // If we hit quota, try to inform the user
-    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-      throw new Error('Storage limit reached. Try deleting old reports with many images.');
+    if (e instanceof DOMException && (e.name === 'QuotaExceededError' || e.code === 22)) {
+      alert('Local storage limit reached. Please delete old reports with many high-quality images to save more data.');
+      throw new Error('Storage limit reached.');
     }
     throw e;
   }
@@ -134,7 +135,7 @@ export const updateComplaint = (updated: Complaint) => {
 export const getTheme = (): 'light' | 'dark' => (localStorage.getItem(KEYS.THEME) as 'light' | 'dark') || 'light';
 export const saveTheme = (theme: 'light' | 'dark') => localStorage.setItem(KEYS.THEME, theme);
 
-// --- Backup & Restore (Reworked) ---
+// --- Backup & Restore ---
 export interface BackupPackage {
   app: 'SalesTrack';
   version: string;
@@ -151,7 +152,7 @@ export interface BackupPackage {
 export const exportFullBackup = (): string => {
   const packageData: BackupPackage = {
     app: 'SalesTrack',
-    version: '5.5.0',
+    version: '6.0.0',
     timestamp: new Date().toISOString(),
     data: {
       user: getJSON<UserProfile>(KEYS.USER),
@@ -167,24 +168,16 @@ export const exportFullBackup = (): string => {
 export const importFullBackup = (jsonString: string): { success: boolean; message: string } => {
   try {
     const parsed = JSON.parse(jsonString);
-    
-    // Basic validation
     if (parsed.app !== 'SalesTrack' || !parsed.data) {
       return { success: false, message: 'Invalid file format. Please use a SalesTrack backup file.' };
     }
-
     const { user, sales, eod, crm, theme } = parsed.data;
-
-    // Nuclear clear to ensure no key collisions or leftover junk
     localStorage.clear();
-
-    // Re-apply keys
     if (user) setJSON(KEYS.USER, user);
     if (sales) setJSON(KEYS.SALES, sales);
     if (eod) setJSON(KEYS.EOD, eod);
     if (crm) setJSON(KEYS.CRM, crm);
     if (theme) localStorage.setItem(KEYS.THEME, theme);
-    
     return { success: true, message: 'Backup restored successfully!' };
   } catch (e: any) {
     console.error("Restore failed:", e);
@@ -198,34 +191,9 @@ export const compressImage = (file: File): Promise<string> => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
         reader.onload = (event) => {
-            const img = new Image();
-            img.src = event.target?.result as string;
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                // Target a max width of 1024 for better storage management
-                const maxDim = 1024;
-                let width = img.width;
-                let height = img.height;
-
-                if (width > height) {
-                    if (width > maxDim) {
-                        height *= maxDim / width;
-                        width = maxDim;
-                    }
-                } else {
-                    if (height > maxDim) {
-                        width *= maxDim / height;
-                        height = maxDim;
-                    }
-                }
-
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx?.drawImage(img, 0, 0, width, height);
-                // Lower quality slightly to 0.6 for significant space saving
-                resolve(canvas.toDataURL('image/jpeg', 0.6));
-            };
+            // Instruciton: Don't compress image quality, use original size.
+            // We directly return the data URL which is a Base64 representation of the original file.
+            resolve(event.target?.result as string);
         };
         reader.onerror = error => reject(error);
     });
