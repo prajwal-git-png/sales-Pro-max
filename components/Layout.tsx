@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home, PlusCircle, Users, Settings, Sun, Moon, Sparkles, Send, X, ClipboardCheck, MapPin, CalendarCheck, MessageSquare } from 'lucide-react';
+import { Home, PlusCircle, Users, Settings, Sun, Moon, Send, ClipboardCheck, CalendarCheck, MessageSquare } from 'lucide-react';
 import { Tab, UserProfile, DailyReport } from '../types';
 import { sendCoachMessage, getOfflineResponse, ChatMessage } from '../services/aiService';
 import { Modal } from './ui/GlassComponents';
@@ -104,22 +104,43 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
             onClick={() => !isIslandExpanded && setIsIslandExpanded(true)}
         >
             {!isIslandExpanded ? (
-                <>
+                <div className="flex items-center gap-3">
+                    {user.avatar ? (
+                        <img src={user.avatar} className="w-6 h-6 rounded-full object-cover border border-white/20" />
+                    ) : (
+                        <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center text-[10px] font-bold">
+                            {user.name.charAt(0)}
+                        </div>
+                    )}
+                    <span className="text-sm font-medium tracking-wide drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] animate-pulse-slow">{user.name.split(' ')[0]}</span>
                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.8)]" />
-                    <span className="text-sm font-medium tracking-wide drop-shadow-[0_0_10px_rgba(255,255,255,0.5)] animate-pulse-slow">{user.name}</span>
-                    <div className="w-6 h-6 rounded-full bg-zinc-800 flex items-center justify-center ml-2 cursor-pointer hover:bg-zinc-700 transition-colors" onClick={(e) => { e.stopPropagation(); setShowCoach(true); }}>
-                        <MessageSquare size={12} className="text-white" />
-                    </div>
-                </>
+                </div>
             ) : (
-                <div className="flex flex-col items-center text-center space-y-4 animate-in fade-in zoom-in duration-300">
-                    <div className="w-12 h-1 bg-zinc-800 rounded-full mb-2 cursor-pointer hover:bg-zinc-700" onClick={(e) => { e.stopPropagation(); setIsIslandExpanded(false); }} />
-                    <p className="text-lg font-serif italic text-zinc-300">"{quote}"</p>
-                    <div className="flex gap-4 w-full pt-2">
+                <div className="flex flex-col items-center text-center space-y-4 animate-in fade-in zoom-in duration-300 w-full">
+                    <div className="flex items-center gap-3 w-full px-2">
+                        {user.avatar ? (
+                            <img src={user.avatar} className="w-10 h-10 rounded-full object-cover border border-white/20" />
+                        ) : (
+                            <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold">
+                                {user.name.charAt(0)}
+                            </div>
+                        )}
+                        <div className="text-left flex-1">
+                            <p className="text-sm font-bold">{user.name}</p>
+                            <p className="text-[10px] text-zinc-400">{user.storeName}</p>
+                        </div>
+                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.8)]" />
+                    </div>
+                    
+                    <div className="w-full h-[1px] bg-zinc-800/50" />
+                    
+                    <p className="text-base font-serif italic text-zinc-300 px-2">"{quote}"</p>
+                    
+                    <div className="flex gap-3 w-full pt-2">
                         <button onClick={(e) => { e.stopPropagation(); setShowCoach(true); setIsIslandExpanded(false); }} className="flex-1 bg-zinc-800 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-bold active:scale-95 transition-transform hover:bg-zinc-700">
                             <MessageSquare size={16} /> AI Assistant
                         </button>
-                        <button onClick={(e) => { e.stopPropagation(); setIsIslandExpanded(false); }} className="flex-1 bg-zinc-800 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-bold active:scale-95 transition-transform hover:bg-zinc-700">
+                        <button onClick={(e) => { e.stopPropagation(); setIsIslandExpanded(false); }} className="flex-1 bg-zinc-900 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-bold active:scale-95 transition-transform hover:bg-zinc-800 border border-zinc-800">
                             Close
                         </button>
                     </div>

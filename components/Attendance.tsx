@@ -1,19 +1,16 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Circle, useMap } from 'react-leaflet';
-import { CheckCircle, XCircle, AlertTriangle, MapPin, Share2, Calendar as CalendarIcon } from 'lucide-react';
-import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
+import { CheckCircle, AlertTriangle, MapPin, Share2, Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { GlassCard, GlassButton } from './ui/GlassComponents';
 import { UserProfile, AttendanceEntry, StoreLocation } from '../types';
-import { getAttendance, saveAttendance, saveUser } from '../services/storageService';
+import { getAttendance, saveAttendance } from '../services/storageService';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-// Fix Leaflet marker icon issue
-import icon from 'leaflet/dist/images/marker-icon.png';
-import iconShadow from 'leaflet/dist/images/marker-shadow.png';
-
-let DefaultIcon = L.icon({
-    iconUrl: icon,
-    shadowUrl: iconShadow,
+// Fix Leaflet marker icon issue using CDN URLs to avoid module resolution errors
+const DefaultIcon = L.icon({
+    iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+    shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
     iconSize: [25, 41],
     iconAnchor: [12, 41]
 });
@@ -25,17 +22,17 @@ interface AttendanceProps {
   onUpdateUser: (u: UserProfile) => void;
 }
 
-const Attendance: React.FC<AttendanceProps> = ({ user, onUpdateUser }) => {
+const Attendance: React.FC<AttendanceProps> = ({ user }) => {
   const [attendanceHistory, setAttendanceHistory] = useState<AttendanceEntry[]>([]);
   const [currentLocation, setCurrentLocation] = useState<StoreLocation | null>(null);
   const [distance, setDistance] = useState<number | null>(null);
   const [status, setStatus] = useState<'Present' | 'Week Off' | 'Leave' | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [loadingLocation, setLoadingLocation] = useState(false);
-  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
     loadHistory();
+    getLocation();
   }, []);
 
   const loadHistory = async () => {
@@ -50,9 +47,7 @@ const Attendance: React.FC<AttendanceProps> = ({ user, onUpdateUser }) => {
 
   const getLocation = () => {
     setLoadingLocation(true);
-    setErrorMsg('');
     if (!navigator.geolocation) {
-      setErrorMsg('Geolocation is not supported by your browser');
       setLoadingLocation(false);
       return;
     }
@@ -71,10 +66,10 @@ const Attendance: React.FC<AttendanceProps> = ({ user, onUpdateUser }) => {
           setDistance(dist);
         }
       },
-      (error) => {
-        setErrorMsg('Unable to retrieve your location');
+      () => {
         setLoadingLocation(false);
-      }
+      },
+      { enableHighAccuracy: true }
     );
   };
 
@@ -100,11 +95,12 @@ const Attendance: React.FC<AttendanceProps> = ({ user, onUpdateUser }) => {
             return;
         }
         if (!currentLocation) {
+            alert("Waiting for location... Please try again in a moment.");
             getLocation();
             return;
         }
         if (distance && distance > 200) { // 200 meters radius
-            alert(`You are ${Math.round(distance)}m away from the store. You need to be within 200m.`);
+            alert(`You are ${Math.round(distance)}m away from the store. You need to be within 200m to mark Present.`);
             return;
         }
     }
@@ -125,12 +121,13 @@ const Attendance: React.FC<AttendanceProps> = ({ user, onUpdateUser }) => {
   const handleShareReport = () => {
     if (!status) return;
     const todayStr = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
-    const text = `Name: ${user.name}
+    
+    // Exact format requested by user
+    const text = `Name :${user.name}
 Store: ${user.storeName}
-Location: ${user.storeLocation?.address || 'Unknown'}
-Date: ${todayStr}
-Status: ${status}
-${status === 'Present' ? 'I am in the store sir...' : ''}`;
+Location: ${user.storeLocation?.address || 'JP Nagar 2nd phase Bengaluru'}
+Date : ${todayStr}    
+${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
     
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -166,7 +163,7 @@ ${status === 'Present' ? 'I am in the store sir...' : ''}`;
         </div>
       </div>
 
-      <GlassCard className="p-4 space-y-4">
+      <GlassCard className="p-4 space-y-4 rounded-2xl">
         {!user.storeLocation ? (
             <div className="text-center py-6 space-y-3">
                 <AlertTriangle className="mx-auto text-amber-500" size={32} />
@@ -175,7 +172,7 @@ ${status === 'Present' ? 'I am in the store sir...' : ''}`;
             </div>
         ) : (
             <>
-                <div className="h-48 w-full rounded-2xl overflow-hidden relative z-0">
+                <div className="h-48 w-full rounded-2xl overflow-hidden relative z-0 border border-zinc-200 dark:border-zinc-800">
                     {currentLocation ? (
                         <MapContainer center={[currentLocation.lat, currentLocation.lng]} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
                             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -185,26 +182,26 @@ ${status === 'Present' ? 'I am in the store sir...' : ''}`;
                         </MapContainer>
                     ) : (
                         <div className="h-full w-full bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
-                            <p className="text-xs text-zinc-500">Map loading...</p>
+                            <p className="text-xs text-zinc-500">Locating...</p>
                         </div>
                     )}
-                    <button onClick={getLocation} className="absolute bottom-2 right-2 z-[400] bg-white dark:bg-zinc-800 p-2 rounded-full shadow-md">
-                        <MapPin size={16} className={loadingLocation ? 'animate-bounce' : ''} />
+                    <button onClick={getLocation} className="absolute bottom-2 right-2 z-[400] bg-white dark:bg-zinc-800 p-2 rounded-full shadow-md border border-zinc-200 dark:border-zinc-700">
+                        <MapPin size={16} className={loadingLocation ? 'animate-bounce text-blue-500' : 'text-zinc-600 dark:text-zinc-300'} />
                     </button>
                 </div>
                 
-                <div className="flex justify-between items-center text-xs text-zinc-500">
-                    <span>Distance to Store: {distance !== null ? `${Math.round(distance)}m` : 'Unknown'}</span>
-                    <span className={distance !== null && distance <= 200 ? 'text-green-500 font-bold' : 'text-amber-500 font-bold'}>
-                        {distance !== null && distance <= 200 ? 'Within Range' : 'Out of Range'}
+                <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-wider text-zinc-500 px-1">
+                    <span>Distance: {distance !== null ? `${Math.round(distance)}m` : '---'}</span>
+                    <span className={distance !== null && distance <= 200 ? 'text-green-500' : 'text-amber-500'}>
+                        {distance !== null && distance <= 200 ? '✓ Within Range' : '⚠ Out of Range'}
                     </span>
                 </div>
 
                 {!status ? (
                     <div className="grid grid-cols-3 gap-3">
-                        <GlassButton onClick={() => handleMarkAttendance('Present')} className="bg-green-500/10 hover:bg-green-500/20 border-green-500/30 text-green-600 dark:text-green-400">Present</GlassButton>
-                        <GlassButton onClick={() => handleMarkAttendance('Week Off')} className="bg-zinc-500/10 hover:bg-zinc-500/20 border-zinc-500/30 text-zinc-600 dark:text-zinc-400">Week Off</GlassButton>
-                        <GlassButton onClick={() => handleMarkAttendance('Leave')} className="bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-600 dark:text-amber-400">Leave</GlassButton>
+                        <GlassButton onClick={() => handleMarkAttendance('Present')} className="bg-green-500/10 hover:bg-green-500/20 border-green-500/30 text-green-600 dark:text-green-400 rounded-2xl py-3">Present</GlassButton>
+                        <GlassButton onClick={() => handleMarkAttendance('Week Off')} className="bg-zinc-500/10 hover:bg-zinc-500/20 border-zinc-500/30 text-zinc-600 dark:text-zinc-400 rounded-2xl py-3">Off</GlassButton>
+                        <GlassButton onClick={() => handleMarkAttendance('Leave')} className="bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-2xl py-3">Leave</GlassButton>
                     </div>
                 ) : (
                     <div className="space-y-3">
@@ -217,10 +214,10 @@ ${status === 'Present' ? 'I am in the store sir...' : ''}`;
                                 {status === 'Present' ? <CheckCircle size={18} /> : status === 'Week Off' ? <CalendarIcon size={18} /> : <AlertTriangle size={18} />}
                                 Marked as {status}
                             </span>
-                            <span className="text-xs opacity-70">{new Date().toLocaleTimeString()}</span>
+                            <span className="text-xs opacity-70 font-mono">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
-                        <GlassButton onClick={handleShareReport} className="w-full flex items-center justify-center gap-2">
-                            <Share2 size={18} /> Share Update
+                        <GlassButton onClick={handleShareReport} className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 bg-zinc-900 text-white dark:bg-white dark:text-black">
+                            <Share2 size={18} /> Share to WhatsApp
                         </GlassButton>
                     </div>
                 )}
@@ -228,34 +225,53 @@ ${status === 'Present' ? 'I am in the store sir...' : ''}`;
         )}
       </GlassCard>
 
-      <GlassCard className="p-4">
-        <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-lg">Attendance History</h3>
-            <div className="flex gap-2">
-                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()-1)))} className="p-1 hover:bg-zinc-100 dark:hover:bg-white/10 rounded-lg">{'<'}</button>
-                <span className="text-sm font-medium">{currentMonth.toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
-                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()+1)))} className="p-1 hover:bg-zinc-100 dark:hover:bg-white/10 rounded-lg">{'>'}</button>
+      <GlassCard className="p-5 rounded-2xl">
+        <div className="flex items-center justify-between mb-6">
+            <h3 className="font-bold text-lg">Attendance Calendar</h3>
+            <div className="flex items-center gap-3 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-2xl">
+                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()-1)))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-full transition-colors"><ChevronLeft size={16} /></button>
+                <span className="text-xs font-bold uppercase tracking-widest">{currentMonth.toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
+                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()+1)))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-full transition-colors"><ChevronRight size={16} /></button>
             </div>
         </div>
-        <div className="grid grid-cols-7 gap-2 mb-2">
-            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="text-center text-[10px] text-zinc-400 font-bold">{d}</div>)}
+        <div className="grid grid-cols-7 gap-2 mb-4">
+            {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i} className="text-center text-[10px] text-zinc-400 font-black uppercase">{d}</div>)}
         </div>
         <div className="grid grid-cols-7 gap-2">
             {calendarDays.map((d, i) => {
                 if (!d) return <div key={i} />;
                 const entry = attendanceHistory.find(e => e.date === d.dateStr);
-                let bgClass = 'bg-zinc-50 dark:bg-zinc-900/50';
+                let bgClass = 'bg-zinc-50 dark:bg-zinc-900/30';
+                let borderClass = 'border-transparent';
+                let textClass = 'text-zinc-400';
+                
                 if (entry) {
-                    if (entry.status === 'Present') bgClass = 'bg-green-100 dark:bg-green-900/40 border-green-200 dark:border-green-800';
-                    else if (entry.status === 'Week Off') bgClass = 'bg-zinc-200 dark:bg-zinc-800 border-zinc-300 dark:border-zinc-700';
-                    else if (entry.status === 'Leave') bgClass = 'bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800';
+                    textClass = 'text-zinc-900 dark:text-white';
+                    if (entry.status === 'Present') {
+                        bgClass = 'bg-green-500/20 dark:bg-green-500/10';
+                        borderClass = 'border-green-500/30';
+                    } else if (entry.status === 'Week Off') {
+                        bgClass = 'bg-zinc-500/20 dark:bg-zinc-500/10';
+                        borderClass = 'border-zinc-500/30';
+                    } else if (entry.status === 'Leave') {
+                        bgClass = 'bg-amber-500/20 dark:bg-amber-500/10';
+                        borderClass = 'border-amber-500/30';
+                    }
                 }
+                
+                const isToday = d.dateStr === new Date().toISOString().split('T')[0];
+                
                 return (
-                    <div key={i} className={`aspect-square rounded-xl flex items-center justify-center text-xs font-medium border border-transparent ${bgClass}`}>
+                    <div key={i} className={`aspect-square rounded-2xl flex items-center justify-center text-xs font-bold border transition-all ${bgClass} ${borderClass} ${textClass} ${isToday ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}>
                         {d.day}
                     </div>
                 );
             })}
+        </div>
+        <div className="mt-6 flex justify-center gap-4 text-[9px] font-bold uppercase tracking-widest">
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-green-500" /> Present</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-zinc-500" /> Week Off</div>
+            <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-amber-500" /> Leave</div>
         </div>
       </GlassCard>
     </div>

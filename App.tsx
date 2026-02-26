@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from './components/Layout';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
@@ -65,13 +65,13 @@ const App = () => {
   if (isLoading) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center bg-zinc-100 dark:bg-zinc-950 transition-colors duration-1000 overflow-hidden">
-        <div className="absolute top-[-15%] left-[-10%] w-[110vw] h-[110vw] bg-zinc-500/10 rounded-none blur-[140px] animate-float opacity-40" />
-        <div className="absolute bottom-[-15%] right-[-10%] w-[90vw] h-[90vw] bg-zinc-500/10 rounded-none blur-[140px] animate-float opacity-40" style={{ animationDelay: '-3s' }} />
+        <div className="absolute top-[-15%] left-[-10%] w-[110vw] h-[110vw] bg-zinc-500/10 rounded-2xl blur-[140px] animate-float opacity-40" />
+        <div className="absolute bottom-[-15%] right-[-10%] w-[90vw] h-[90vw] bg-zinc-500/10 rounded-2xl blur-[140px] animate-float opacity-40" style={{ animationDelay: '-3s' }} />
 
         <div className="relative z-10 flex flex-col items-center gap-12 animate-reveal">
           <div className="relative w-28 h-28">
-            <div className="absolute inset-0 bg-black/10 dark:bg-white/10 blur-2xl scale-110 rounded-none" />
-            <div className="relative h-full w-full bg-black dark:bg-white rounded-none shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/10 dark:bg-white/10 blur-2xl scale-110 rounded-2xl" />
+            <div className="relative h-full w-full bg-black dark:bg-white rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex items-center justify-center">
                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="w-12 h-12 text-white dark:text-black">
                  <path d="M35 65 L50 35 L65 65" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
                </svg>

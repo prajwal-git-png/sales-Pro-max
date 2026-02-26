@@ -127,7 +127,7 @@ export const saveSaleEntry = async (date: string, newItems: SaleItem[], newBillI
   }
 };
 
-export const updateDailyReport = async (date: string, updatedReport: DailyReport) => {
+export const updateDailyReport = async (_date: string, updatedReport: DailyReport) => {
   await putToStore(STORES.SALES, updatedReport);
 };
 

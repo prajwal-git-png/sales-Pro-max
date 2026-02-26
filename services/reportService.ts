@@ -1,6 +1,5 @@
 
-import { DailyReport, UserProfile, SaleItem } from "../types";
-import { getSales } from "./storageService";
+import { DailyReport, UserProfile } from "../types";
 
 export const formatToDisplayDate = (dateStr: string) => {
   const d = new Date(dateStr);

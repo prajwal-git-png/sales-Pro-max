@@ -231,7 +231,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
           <div className="flex justify-between items-center gap-4">
              <div className="flex-1 space-y-1">
                 <label className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Date</label>
-                <div className="relative w-full h-10 bg-white/50 dark:bg-zinc-800/50 backdrop-blur-md rounded-none px-3 flex items-center shadow-sm border border-white/40 dark:border-white/20">
+                <div className="relative w-full h-10 bg-white/50 dark:bg-zinc-800/50 backdrop-blur-md rounded-2xl px-3 flex items-center shadow-sm border border-white/40 dark:border-white/20">
                     <span className="font-bold text-sm text-zinc-800 dark:text-zinc-200 pointer-events-none">
                         {formatToDisplayDate(date)}
                     </span>
@@ -248,7 +248,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                  <span className="text-xs font-bold text-zinc-500 uppercase tracking-wide">Status</span>
                  <label className="relative inline-flex items-center cursor-pointer">
                     <input type="checkbox" className="sr-only peer" checked={isWeekOff} onChange={e => setIsWeekOff(e.target.checked)} />
-                    <div className="w-12 h-7 bg-zinc-200 peer-focus:outline-none rounded-none peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-none after:h-6 after:w-6 after:transition-all dark:border-zinc-600 peer-checked:bg-blue-600 shadow-inner"></div>
+                    <div className="w-12 h-7 bg-zinc-200 peer-focus:outline-none rounded-2xl peer dark:bg-zinc-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-2xl after:h-6 after:w-6 after:transition-all dark:border-zinc-600 peer-checked:bg-blue-600 shadow-inner"></div>
                     <span className="ml-2 text-xs font-semibold text-zinc-500 dark:text-zinc-400 w-12">{isWeekOff ? 'OFF' : 'Work'}</span>
                 </label>
              </div>
@@ -270,7 +270,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
               const calculatedTotal = item.price * item.quantity;
 
               return (
-              <div key={item.id} className="relative bg-white/50 dark:bg-zinc-900/50 backdrop-blur-xl rounded-none border border-white/50 dark:border-white/20 shadow-sm animate-in zoom-in-95 duration-200 overflow-hidden">
+              <div key={item.id} className="relative bg-white/50 dark:bg-zinc-900/50 backdrop-blur-xl rounded-2xl border border-white/50 dark:border-white/20 shadow-sm animate-in zoom-in-95 duration-200 overflow-hidden">
                 {items.length > 1 && (
                     <button type="button" onClick={() => removeItem(index)} className="absolute top-2 right-2 w-7 h-7 flex items-center justify-center bg-red-500/80 backdrop-blur-md text-white rounded-none shadow-sm hover:bg-red-500/90 transition-colors z-10">
                         <Trash2 size={14} />
@@ -281,7 +281,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                     <div className="space-y-1.5 relative z-20">
                         <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Product Model</label>
                         <div className="relative">
-                            <div className="flex items-center justify-between w-full bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/20 rounded-none px-4 py-3 cursor-pointer hover:bg-white/80 transition-colors backdrop-blur-md"
+                            <div className="flex items-center justify-between w-full bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/20 rounded-2xl px-4 py-3 cursor-pointer hover:bg-white/80 transition-colors backdrop-blur-md"
                                 onClick={() => { setActiveSearchIndex(index); setSearchTerm(item.productName); }}>
                                 <span className={`text-sm font-medium ${!item.productName && 'text-zinc-400 italic'}`}>
                                     {item.productName || 'Select Product...'}
@@ -290,9 +290,9 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                             </div>
 
                             {activeSearchIndex === index && (
-                                <div className="absolute top-full left-0 right-0 mt-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl rounded-none shadow-sm border border-white/50 dark:border-white/20 max-h-60 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 z-50">
+                                <div className="absolute top-full left-0 right-0 mt-2 bg-white/90 dark:bg-zinc-900/90 backdrop-blur-2xl rounded-2xl shadow-sm border border-white/50 dark:border-white/20 max-h-60 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150 z-50">
                                     <div className="p-2 border-b border-gray-200/50 dark:border-white/10 sticky top-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md">
-                                        <div className="flex items-center gap-2 bg-white/50 dark:bg-black/40 rounded-none border border-white/40 dark:border-white/10 px-3 py-1.5">
+                                        <div className="flex items-center gap-2 bg-white/50 dark:bg-black/40 rounded-2xl border border-white/40 dark:border-white/10 px-3 py-1.5">
                                             <Search size={14} className="text-zinc-400" />
                                             <input autoFocus className="w-full py-1 text-sm outline-none bg-transparent" placeholder="Search model..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                                             {searchTerm && <X size={14} className="text-zinc-400 cursor-pointer" onClick={() => setSearchTerm('')} />}
@@ -314,14 +314,14 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                             <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Quantity</label>
-                            <input type="number" min="1" className="w-full bg-white/60 dark:bg-black/40 border-b-2 border-zinc-300 dark:border-zinc-600 focus:border-blue-500 rounded-none px-3 py-2.5 text-center font-mono text-lg font-semibold outline-none transition-all h-12 backdrop-blur-md" value={item.quantity} onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)} required />
+                            <input type="number" min="1" className="w-full bg-white/60 dark:bg-black/40 border-b-2 border-zinc-300 dark:border-zinc-600 focus:border-blue-500 rounded-2xl px-3 py-2.5 text-center font-mono text-lg font-semibold outline-none transition-all h-12 backdrop-blur-md" value={item.quantity} onChange={e => updateItem(index, 'quantity', parseInt(e.target.value) || 0)} required />
                         </div>
 
                         <div className="space-y-1.5 relative">
                              <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">{mode === 'total' ? 'Total Amt' : 'Unit Price'}</label>
                             <div className="relative">
                                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 font-medium z-10">₹</span>
-                                <input type="number" min="0" step="any" className={`w-full bg-white/60 dark:bg-black/40 border-b-2 rounded-none pl-8 pr-3 py-2.5 font-mono text-lg font-semibold outline-none transition-all h-12 backdrop-blur-md ${mode === 'total' ? 'border-purple-400 focus:border-purple-600 text-purple-700 dark:text-purple-300' : 'border-zinc-300 dark:border-zinc-600 focus:border-blue-500'}`} value={displayPrice || ''} onChange={e => updatePrice(index, parseFloat(e.target.value) || 0)} required />
+                                <input type="number" min="0" step="any" className={`w-full bg-white/60 dark:bg-black/40 border-b-2 rounded-2xl pl-8 pr-3 py-2.5 font-mono text-lg font-semibold outline-none transition-all h-12 backdrop-blur-md ${mode === 'total' ? 'border-purple-400 focus:border-purple-600 text-purple-700 dark:text-purple-300' : 'border-zinc-300 dark:border-zinc-600 focus:border-blue-500'}`} value={displayPrice || ''} onChange={e => updatePrice(index, parseFloat(e.target.value) || 0)} required />
                             </div>
                         </div>
                     </div>
@@ -329,7 +329,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
 
                 <div className="bg-white/40 dark:bg-black/40 border-t border-white/50 dark:border-white/20 p-3 flex justify-between items-center backdrop-blur-md">
                     <div className="text-xs text-zinc-500 dark:text-zinc-400 font-medium px-2">Total: <span className="text-zinc-800 dark:text-white font-bold ml-1">₹{calculatedTotal.toLocaleString()}</span></div>
-                    <button type="button" onClick={() => togglePriceMode(index)} className="text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 px-3 py-1.5 rounded-none bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-white/50 dark:border-white/20 text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 transition-colors shadow-sm">
+                    <button type="button" onClick={() => togglePriceMode(index)} className="text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md border border-white/50 dark:border-white/20 text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700 transition-colors shadow-sm">
                         <RefreshCcw size={10} className={mode === 'total' ? 'text-purple-500' : ''} /> {mode === 'total' ? 'Unit Price' : 'Total Amount'}
                     </button>
                 </div>
@@ -354,7 +354,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
             </div>
             
             {billImages.length === 0 ? (
-                <div className="border border-dashed border-zinc-400/50 dark:border-zinc-600/50 rounded-none p-8 flex flex-col items-center justify-center text-zinc-500 gap-2 bg-white/40 dark:bg-black/20 backdrop-blur-sm">
+                <div className="border border-dashed border-zinc-400/50 dark:border-zinc-600/50 rounded-2xl p-8 flex flex-col items-center justify-center text-zinc-500 gap-2 bg-white/40 dark:bg-black/20 backdrop-blur-sm">
                     <ImageIcon size={32} strokeWidth={1.5} />
                     <p className="text-xs font-medium">No bills uploaded</p>
                 </div>
@@ -362,7 +362,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                 <div className="flex gap-3 overflow-x-auto pb-2 snap-x scrollbar-hide">
                     {billImages.map((img, idx) => (
                         <div key={idx} className="relative flex-shrink-0 w-24 h-32 snap-start group">
-                            <img src={img} alt={`Bill ${idx}`} className="w-full h-full object-cover rounded-none border border-white/50 dark:border-white/20 shadow-sm" />
+                            <img src={img} alt={`Bill ${idx}`} className="w-full h-full object-cover rounded-2xl border border-white/50 dark:border-white/20 shadow-sm" />
                             <button type="button" onClick={() => removeImage(idx)} className="absolute -top-2 -right-2 bg-red-500/80 backdrop-blur-md text-white rounded-none p-1 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity">
                                 <X size={12} />
                             </button>
