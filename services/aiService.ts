@@ -15,20 +15,21 @@ const getSystemInstruction = (user: UserProfile, sales: DailyReport[]) => {
         `Date: ${s.date}, Total: ₹${s.totalValue}, Qty: ${s.totalQty}`
     ).join('\n');
 
-    return `You are an expert Bajaj Electricals Sales Coach. 
+    return `You are a friendly and casual Bajaj Electricals Sales Assistant.
 Executive: ${user.name} at ${user.storeName}.
 Latest Sales History:
 ${salesSummary || 'No recent sales recorded.'}
 
 Guidelines:
-1. Provide retail sales techniques for Mixers, Geysers, and Irons.
-2. Highlight Bajaj technical features vs competitors.
-3. Be professional, motivating, and concise.
+1. Be casual, friendly, and approachable. Use natural language.
+2. Focus on helping with sales techniques, product features (Mixers, Geysers, Irons), and handling customer objections.
+3. If asked about non-work topics, gently steer back to sales or products, or keep it brief and friendly.
+4. Highlight Bajaj's strengths (durability, service, trust) naturally.
 
 Response Rules:
-- Output PLAIN TEXT ONLY. No bolding (**), no markdown.
-- Use emojis sparingly for personality.
-- Maximum 150 words per response.`;
+- Keep it short and conversational (max 100 words).
+- Use emojis to keep the mood light. 🌟
+- No complex formatting. Just plain text.`;
 };
 
 export const sendCoachMessage = async (
@@ -37,33 +38,31 @@ export const sendCoachMessage = async (
     history: ChatMessage[], 
     newMessage: string
 ): Promise<string> => {
-    const apiKey = process.env.API_KEY;
+    // Use user key if available, else env (though env is usually not exposed to client unless VITE_)
+    // Assuming process.env.API_KEY is available or handled by proxy/server if this was full stack.
+    // Since this is client-side, we rely on user.apiKey or a hardcoded one (not recommended) or the one injected by the platform.
+    const apiKey = user.apiKey || process.env.GEMINI_API_KEY; 
     
     if (!apiKey) {
-        throw new Error("API_KEY_MISSING");
+        console.warn("No API Key found");
+        return getOfflineResponse(newMessage, user);
     }
 
     try {
         const ai = new GoogleGenAI({ apiKey });
         
-        // Gemini API contents strictly requires alternating roles: user, model, user, model...
-        // AND it usually MUST start with 'user'.
         const contents: any[] = [];
         
         // Filter history to ensure it's valid and starts with user
         const validHistory = [...history];
         
-        // If history starts with model (greeting), we might need to skip it or handle it carefully
-        // because the SDK .generateContent(contents) expects the first turn to be 'user'.
         let filteredHistory = validHistory.filter((msg, idx) => {
-            // If it's the first message and it's from model, skip it in history sent to API
             if (idx === 0 && msg.role === 'model') return false;
             return true;
         });
 
         let lastRole = '';
         for (const msg of filteredHistory) {
-            // Skip duplicates of the same role to prevent API errors
             if (msg.role !== lastRole) {
                 contents.push({
                     role: msg.role,
@@ -73,7 +72,6 @@ export const sendCoachMessage = async (
             }
         }
 
-        // Add the current user message
         contents.push({
             role: 'user',
             parts: [{ text: newMessage }]
@@ -84,8 +82,8 @@ export const sendCoachMessage = async (
             contents: contents,
             config: {
                 systemInstruction: getSystemInstruction(user, sales),
-                maxOutputTokens: 1000,
-                temperature: 0.8,
+                maxOutputTokens: 150,
+                temperature: 0.7,
             }
         });
 
@@ -98,8 +96,7 @@ export const sendCoachMessage = async (
     } catch (e: any) {
         console.error("AI Coach Error:", e);
         if (e.message?.includes('429')) throw new Error("RATE_LIMIT");
-        if (e.message?.includes('400')) throw new Error("INVALID_REQUEST");
-        throw e;
+        return getOfflineResponse(newMessage, user);
     }
 };
 

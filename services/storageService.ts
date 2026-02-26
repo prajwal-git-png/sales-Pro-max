@@ -1,11 +1,12 @@
-import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry } from '../types';
+import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry, AttendanceEntry } from '../types';
 
 const DB_NAME = 'SalesTrackDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // Incremented version
 const STORES = {
   SALES: 'sales',
   EOD: 'eod',
-  CRM: 'crm'
+  CRM: 'crm',
+  ATTENDANCE: 'attendance'
 };
 
 const LS_KEYS = {
@@ -22,6 +23,7 @@ const openDB = (): Promise<IDBDatabase> => {
       if (!db.objectStoreNames.contains(STORES.SALES)) db.createObjectStore(STORES.SALES, { keyPath: 'date' });
       if (!db.objectStoreNames.contains(STORES.EOD)) db.createObjectStore(STORES.EOD, { keyPath: 'date' });
       if (!db.objectStoreNames.contains(STORES.CRM)) db.createObjectStore(STORES.CRM, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(STORES.ATTENDANCE)) db.createObjectStore(STORES.ATTENDANCE, { keyPath: 'date' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
@@ -151,6 +153,12 @@ export const updateComplaint = async (updated: Complaint) => {
   await putToStore(STORES.CRM, updated);
 };
 
+// --- Attendance ---
+export const getAttendance = (): Promise<AttendanceEntry[]> => getAllFromStore<AttendanceEntry>(STORES.ATTENDANCE);
+export const saveAttendance = async (entry: AttendanceEntry) => {
+  await putToStore(STORES.ATTENDANCE, entry);
+};
+
 // --- Backup & Restore ---
 export interface BackupPackage {
   app: 'SalesTrack';
@@ -161,6 +169,7 @@ export interface BackupPackage {
     sales: DailyReport[];
     eod: StoreEODEntry[];
     crm: Complaint[];
+    attendance?: AttendanceEntry[];
     theme: string;
   }
 }
@@ -168,13 +177,14 @@ export interface BackupPackage {
 export const exportFullBackup = async (): Promise<string> => {
   const packageData: BackupPackage = {
     app: 'SalesTrack',
-    version: '7.0.0',
+    version: '8.0.0',
     timestamp: new Date().toISOString(),
     data: {
       user: getUser(),
       sales: await getSales(),
       eod: await getEODEntries(),
       crm: await getComplaints(),
+      attendance: await getAttendance(),
       theme: localStorage.getItem(LS_KEYS.THEME) || 'light'
     }
   };
@@ -187,18 +197,20 @@ export const importFullBackup = async (jsonString: string): Promise<{ success: b
     if (parsed.app !== 'SalesTrack' || !parsed.data) {
       return { success: false, message: 'Invalid file format.' };
     }
-    const { user, sales, eod, crm, theme } = parsed.data;
+    const { user, sales, eod, crm, attendance, theme } = parsed.data;
     
     // Clear all
     localStorage.removeItem(LS_KEYS.USER);
     await clearStore(STORES.SALES);
     await clearStore(STORES.EOD);
     await clearStore(STORES.CRM);
+    await clearStore(STORES.ATTENDANCE);
 
     if (user) saveUser(user);
     if (sales) for (const s of sales) await putToStore(STORES.SALES, s);
     if (eod) for (const e of eod) await putToStore(STORES.EOD, e);
     if (crm) for (const c of crm) await putToStore(STORES.CRM, c);
+    if (attendance) for (const a of attendance) await putToStore(STORES.ATTENDANCE, a);
     if (theme) saveTheme(theme as 'light' | 'dark');
 
     return { success: true, message: 'Backup restored successfully!' };

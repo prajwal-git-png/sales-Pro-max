@@ -25,6 +25,19 @@ export interface StoreEODEntry {
   eolTarget: number;
 }
 
+export interface StoreLocation {
+  lat: number;
+  lng: number;
+  address?: string;
+}
+
+export interface AttendanceEntry {
+  date: string; // YYYY-MM-DD
+  status: 'Present' | 'Week Off' | 'Leave';
+  checkInTime?: string;
+  location?: StoreLocation;
+}
+
 export interface UserProfile {
   name: string;
   employeeId: string;
@@ -34,6 +47,9 @@ export interface UserProfile {
   monthlyTarget: number;
   avatar?: string; // Base64
   apiKey?: string; // User provided API Key
+  storeLocation?: StoreLocation;
+  brandSiteUrl?: string;
+  tollFreeNumber?: string;
   customTargets?: {
     daily: number;
     weekly: number;
@@ -47,8 +63,10 @@ export interface Complaint {
   phoneNumber: string;
   productModel: string;
   issueType: 'Installation' | 'Complaint';
+  callType?: 'Inbound' | 'Outbound';
+  customProductName?: string;
   isResolved: boolean;
   date: string;
 }
 
-export type Tab = 'dashboard' | 'entry' | 'eod' | 'crm' | 'settings';
+export type Tab = 'dashboard' | 'attendance' | 'entry' | 'eod' | 'crm' | 'settings';
