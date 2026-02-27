@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home, PlusCircle, Users, Settings, Sun, Moon, Send, ClipboardCheck, CalendarCheck, MessageSquare } from 'lucide-react';
+import { Home, PlusCircle, Users, Settings, Send, ClipboardCheck, CalendarCheck, MessageSquare } from 'lucide-react';
 import { Tab, UserProfile, DailyReport } from '../types';
 import { sendCoachMessage, getOfflineResponse, ChatMessage } from '../services/aiService';
 import { Modal } from './ui/GlassComponents';
@@ -9,14 +9,12 @@ interface LayoutProps {
   children: React.ReactNode;
   activeTab: Tab;
   onTabChange: (tab: Tab) => void;
-  isDark: boolean;
-  toggleTheme: () => void;
   user: UserProfile | null;
   salesData: DailyReport[];
   onUpdateUser: (user: UserProfile) => void;
 }
 
-const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDark, toggleTheme, user, salesData, onUpdateUser }) => {
+const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user, salesData, onUpdateUser }) => {
   const [showCoach, setShowCoach] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputMsg, setInputMsg] = useState('');
@@ -99,6 +97,13 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
 
       {/* Dynamic Island Header */}
       <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
+        {/* Backdrop for closing when expanded */}
+        {isIslandExpanded && (
+            <div 
+                className="fixed inset-0 z-[-1] pointer-events-auto" 
+                onClick={() => setIsIslandExpanded(false)} 
+            />
+        )}
         <div 
             className={`pointer-events-auto bg-black text-white rounded-[2rem] shadow-2xl transition-all duration-500 ease-[cubic-bezier(0.175,0.885,0.32,1.275)] ${isIslandExpanded ? 'w-[90vw] max-w-sm p-6' : 'w-auto h-12 px-4 py-2 flex items-center gap-3'}`}
             onClick={() => !isIslandExpanded && setIsIslandExpanded(true)}
@@ -137,11 +142,8 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
                     <p className="text-base font-serif italic text-zinc-300 px-2">"{quote}"</p>
                     
                     <div className="flex gap-3 w-full pt-2">
-                        <button onClick={(e) => { e.stopPropagation(); setShowCoach(true); setIsIslandExpanded(false); }} className="flex-1 bg-zinc-800 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-bold active:scale-95 transition-transform hover:bg-zinc-700">
-                            <MessageSquare size={16} /> AI Assistant
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); setIsIslandExpanded(false); }} className="flex-1 bg-zinc-900 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-bold active:scale-95 transition-transform hover:bg-zinc-800 border border-zinc-800">
-                            Close
+                        <button onClick={(e) => { e.stopPropagation(); setShowCoach(true); setIsIslandExpanded(false); }} className="flex-1 bg-zinc-800 py-3 rounded-3xl flex items-center justify-center gap-2 text-sm font-bold active:scale-95 transition-transform hover:bg-zinc-700">
+                            <MessageSquare size={16} />
                         </button>
                     </div>
                 </div>
@@ -157,18 +159,13 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
           )}
       </main>
 
-      {/* Theme Toggle (Moved to bottom left fixed) */}
-      <button onClick={toggleTheme} className="fixed bottom-24 left-4 z-40 w-10 h-10 rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-md border border-white/40 dark:border-white/20 flex items-center justify-center text-yellow-500 dark:text-yellow-400 shadow-lg transition-transform hover:scale-110 active:scale-95">
-        {isDark ? <Sun size={18} /> : <Moon size={18} className="text-zinc-600" />}
-      </button>
-
       <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4">
-        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-3xl border border-white/60 dark:border-white/10 shadow-md rounded-2xl px-3 py-2 flex items-center gap-1 sm:gap-4 overflow-x-auto max-w-full no-scrollbar">
+        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-3xl border border-white/60 dark:border-white/10 shadow-md rounded-3xl px-3 py-2 flex items-center gap-1 sm:gap-4 overflow-x-auto max-w-full no-scrollbar">
             {navItems.map((item) => {
               const isActive = activeTab === item.id;
               return (
                 <button key={item.id} onClick={() => onTabChange(item.id)} className={`relative flex flex-col items-center justify-center transition-all min-w-[50px] ${isActive ? 'text-zinc-900 dark:text-white scale-110' : 'text-zinc-500 dark:text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}>
-                  <div className={`p-2 rounded-2xl ${isActive ? 'bg-zinc-200/50 dark:bg-white/10' : ''}`}><item.icon size={20} /></div>
+                  <div className={`p-2 rounded-3xl ${isActive ? 'bg-zinc-200/50 dark:bg-white/10' : ''}`}><item.icon size={20} /></div>
                   {isActive && <span className="absolute -bottom-1 w-1 h-1 bg-zinc-900 dark:bg-white rounded-full" />}
                   <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5">{item.label}</span>
                 </button>
@@ -182,12 +179,12 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
             <div className="flex-1 overflow-y-auto space-y-4 px-1 pb-4 scrollbar-hide">
                 {messages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}>
-                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-slate-800 dark:bg-zinc-100 text-white dark:text-black rounded-tr-none' : 'bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md text-slate-700 dark:text-slate-200 border border-white/50 dark:border-white/20 shadow-sm rounded-tl-none'}`}>
+                        <div className={`max-w-[85%] p-3 rounded-3xl text-sm ${msg.role === 'user' ? 'bg-slate-800 dark:bg-zinc-100 text-white dark:text-black rounded-tr-none' : 'bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md text-slate-700 dark:text-slate-200 border border-white/50 dark:border-white/20 shadow-sm rounded-tl-none'}`}>
                             {msg.text}
                         </div>
                     </div>
                 ))}
-                {isTyping && <div className="flex justify-start animate-pulse"><div className="bg-white/50 dark:bg-zinc-800/50 backdrop-blur-sm border border-white/40 dark:border-white/10 px-4 py-3 rounded-2xl rounded-tl-none text-xs text-slate-500 dark:text-slate-400">Coach is thinking...</div></div>}
+                {isTyping && <div className="flex justify-start animate-pulse"><div className="bg-white/50 dark:bg-zinc-800/50 backdrop-blur-sm border border-white/40 dark:border-white/10 px-4 py-3 rounded-3xl rounded-tl-none text-xs text-slate-500 dark:text-slate-400">Coach is thinking...</div></div>}
                 <div ref={messagesEndRef} />
             </div>
             <div className="pt-3 border-t border-gray-200/50 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md">
@@ -196,12 +193,12 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, isDar
                       value={inputMsg} 
                       onChange={e => setInputMsg(e.target.value)} 
                       placeholder="Ask your coach..." 
-                      className="flex-1 bg-white/60 dark:bg-zinc-800/60 backdrop-blur-md border border-white/50 dark:border-white/20 rounded-2xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-800 dark:text-white placeholder-slate-500 dark:placeholder-zinc-400" 
+                      className="flex-1 bg-white/60 dark:bg-zinc-800/60 backdrop-blur-md border border-white/50 dark:border-white/20 rounded-3xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-800 dark:text-white placeholder-slate-500 dark:placeholder-zinc-400" 
                     />
                     <button 
                       type="submit" 
                       disabled={isTyping || !inputMsg.trim()}
-                      className="p-2.5 bg-slate-800 dark:bg-zinc-100 text-white dark:text-black rounded-2xl shadow-sm border border-slate-700 dark:border-zinc-300 transition-transform active:scale-95 disabled:opacity-30"
+                      className="p-2.5 bg-slate-800 dark:bg-zinc-100 text-white dark:text-black rounded-3xl shadow-sm border border-slate-700 dark:border-zinc-300 transition-transform active:scale-95 disabled:opacity-30"
                     >
                       <Send size={18} />
                     </button>

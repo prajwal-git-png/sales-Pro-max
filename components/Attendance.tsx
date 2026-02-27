@@ -158,12 +158,12 @@ ${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-800 to-zinc-500 dark:from-zinc-100 dark:to-zinc-400">Attendance</h2>
-        <div className="text-xs font-bold px-3 py-1 bg-white/50 dark:bg-white/10 rounded-2xl border border-white/20">
+        <div className="text-xs font-bold px-3 py-1 bg-white/50 dark:bg-white/10 rounded-3xl border border-white/20">
             {new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' })}
         </div>
       </div>
 
-      <GlassCard className="p-4 space-y-4 rounded-2xl">
+      <GlassCard className="p-4 space-y-4 rounded-3xl">
         {!user.storeLocation ? (
             <div className="text-center py-6 space-y-3">
                 <AlertTriangle className="mx-auto text-amber-500" size={32} />
@@ -172,7 +172,7 @@ ${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
             </div>
         ) : (
             <>
-                <div className="h-48 w-full rounded-2xl overflow-hidden relative z-0 border border-zinc-200 dark:border-zinc-800">
+                <div className="h-48 w-full rounded-3xl overflow-hidden relative z-0 border border-zinc-200 dark:border-zinc-800">
                     {currentLocation ? (
                         <MapContainer center={[currentLocation.lat, currentLocation.lng]} zoom={15} style={{ height: '100%', width: '100%' }} zoomControl={false}>
                             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
@@ -199,13 +199,13 @@ ${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
 
                 {!status ? (
                     <div className="grid grid-cols-3 gap-3">
-                        <GlassButton onClick={() => handleMarkAttendance('Present')} className="bg-green-500/10 hover:bg-green-500/20 border-green-500/30 text-green-600 dark:text-green-400 rounded-2xl py-3">Present</GlassButton>
-                        <GlassButton onClick={() => handleMarkAttendance('Week Off')} className="bg-zinc-500/10 hover:bg-zinc-500/20 border-zinc-500/30 text-zinc-600 dark:text-zinc-400 rounded-2xl py-3">Off</GlassButton>
-                        <GlassButton onClick={() => handleMarkAttendance('Leave')} className="bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-2xl py-3">Leave</GlassButton>
+                        <GlassButton onClick={() => handleMarkAttendance('Present')} className="bg-green-500/10 hover:bg-green-500/20 border-green-500/30 text-green-600 dark:text-green-400 rounded-3xl py-3">Present</GlassButton>
+                        <GlassButton onClick={() => handleMarkAttendance('Week Off')} className="bg-zinc-500/10 hover:bg-zinc-500/20 border-zinc-500/30 text-zinc-600 dark:text-zinc-400 rounded-3xl py-3">Off</GlassButton>
+                        <GlassButton onClick={() => handleMarkAttendance('Leave')} className="bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-600 dark:text-amber-400 rounded-3xl py-3">Leave</GlassButton>
                     </div>
                 ) : (
                     <div className="space-y-3">
-                        <div className={`p-4 rounded-2xl flex items-center justify-between border ${
+                        <div className={`p-4 rounded-3xl flex items-center justify-between border ${
                             status === 'Present' ? 'bg-green-50/50 border-green-200 text-green-700 dark:bg-green-900/20 dark:border-green-800 dark:text-green-300' :
                             status === 'Week Off' ? 'bg-zinc-50/50 border-zinc-200 text-zinc-700 dark:bg-zinc-900/20 dark:border-zinc-800 dark:text-zinc-300' :
                             'bg-amber-50/50 border-amber-200 text-amber-700 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-300'
@@ -216,7 +216,7 @@ ${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
                             </span>
                             <span className="text-xs opacity-70 font-mono">{new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                         </div>
-                        <GlassButton onClick={handleShareReport} className="w-full flex items-center justify-center gap-2 rounded-2xl py-4 bg-zinc-900 text-white dark:bg-white dark:text-black">
+                        <GlassButton onClick={handleShareReport} className="w-full flex items-center justify-center gap-2 rounded-3xl py-4 bg-zinc-900 text-white dark:bg-white dark:text-black">
                             <Share2 size={18} /> Share to WhatsApp
                         </GlassButton>
                     </div>
@@ -225,10 +225,10 @@ ${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
         )}
       </GlassCard>
 
-      <GlassCard className="p-5 rounded-2xl">
+      <GlassCard className="p-5 rounded-3xl">
         <div className="flex items-center justify-between mb-6">
             <h3 className="font-bold text-lg">Attendance Calendar</h3>
-            <div className="flex items-center gap-3 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-2xl">
+            <div className="flex items-center gap-3 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-3xl">
                 <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()-1)))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-full transition-colors"><ChevronLeft size={16} /></button>
                 <span className="text-xs font-bold uppercase tracking-widest">{currentMonth.toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
                 <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()+1)))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-full transition-colors"><ChevronRight size={16} /></button>
@@ -262,7 +262,7 @@ ${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
                 const isToday = d.dateStr === new Date().toISOString().split('T')[0];
                 
                 return (
-                    <div key={i} className={`aspect-square rounded-2xl flex items-center justify-center text-xs font-bold border transition-all ${bgClass} ${borderClass} ${textClass} ${isToday ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}>
+                    <div key={i} className={`aspect-square rounded-3xl flex items-center justify-center text-xs font-bold border transition-all ${bgClass} ${borderClass} ${textClass} ${isToday ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-zinc-950' : ''}`}>
                         {d.day}
                     </div>
                 );

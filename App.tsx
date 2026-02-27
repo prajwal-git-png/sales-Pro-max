@@ -113,8 +113,6 @@ const App = () => {
     <Layout 
       activeTab={activeTab} 
       onTabChange={setActiveTab}
-      isDark={isDark}
-      toggleTheme={toggleTheme}
       user={user}
       salesData={salesData}
       onUpdateUser={setUser}
@@ -123,7 +121,7 @@ const App = () => {
       {activeTab === 'entry' && <NewEntry user={user} onEntryComplete={refreshData} />}
       {activeTab === 'eod' && <EOD user={user} onUpdateUser={setUser} />}
       {activeTab === 'crm' && <CRM user={user} />}
-      {activeTab === 'settings' && <Settings user={user} onUpdateUser={setUser} onLogout={handleLogout} />}
+      {activeTab === 'settings' && <Settings user={user} onUpdateUser={setUser} onLogout={handleLogout} isDark={isDark} toggleTheme={toggleTheme} />}
     </Layout>
   );
 };

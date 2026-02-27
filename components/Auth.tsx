@@ -70,7 +70,7 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <GlassCard className="w-full max-w-md p-8 animate-in zoom-in-95 duration-500 rounded-2xl border border-white/50 dark:border-white/20 shadow-sm">
+      <GlassCard className="w-full max-w-md p-8 animate-in zoom-in-95 duration-500 rounded-3xl border border-white/50 dark:border-white/20 shadow-sm">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-800 to-zinc-500 dark:from-zinc-100 dark:to-zinc-400 mb-2">SalesTrack</h1>
           <p className="text-zinc-500 dark:text-zinc-400">Welcome back, Executive.</p>
@@ -83,7 +83,7 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
                 placeholder="Enter your name" 
                 value={formData.name} 
                 onChange={e => setFormData({...formData, name: e.target.value})}
-                className={errors.name ? 'border-red-500 ring-1 ring-red-500 rounded-2xl' : 'rounded-2xl'}
+                className={errors.name ? 'border-red-500 ring-1 ring-red-500 rounded-3xl' : 'rounded-3xl'}
             />
             {errors.name && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.name}</p>}
           </div>
@@ -93,7 +93,7 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
                 placeholder="EMP123" 
                 value={formData.employeeId} 
                 onChange={e => setFormData({...formData, employeeId: e.target.value})}
-                className={errors.employeeId ? 'border-red-500 ring-1 ring-red-500 rounded-2xl' : 'rounded-2xl'}
+                className={errors.employeeId ? 'border-red-500 ring-1 ring-red-500 rounded-3xl' : 'rounded-3xl'}
              />
              {errors.employeeId && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.employeeId}</p>}
           </div>
@@ -105,7 +105,7 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
                 placeholder="9876543210" 
                 value={formData.phoneNumber} 
                 onChange={e => setFormData({...formData, phoneNumber: e.target.value})}
-                className={errors.phoneNumber ? 'border-red-500 ring-1 ring-red-500 rounded-2xl' : 'rounded-2xl'}
+                className={errors.phoneNumber ? 'border-red-500 ring-1 ring-red-500 rounded-3xl' : 'rounded-3xl'}
              />
              {errors.phoneNumber && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.phoneNumber}</p>}
           </div>
@@ -115,12 +115,12 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
                 placeholder="Reliance Digital, JPNagara" 
                 value={formData.storeName} 
                 onChange={e => setFormData({...formData, storeName: e.target.value})}
-                className={errors.storeName ? 'border-red-500 ring-1 ring-red-500 rounded-2xl' : 'rounded-2xl'}
+                className={errors.storeName ? 'border-red-500 ring-1 ring-red-500 rounded-3xl' : 'rounded-3xl'}
              />
              {errors.storeName && <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><AlertCircle size={10} /> {errors.storeName}</p>}
           </div>
           
-          <GlassButton type="submit" className="w-full mt-6 rounded-2xl">
+          <GlassButton type="submit" className="w-full mt-6 rounded-3xl">
             Get Started
           </GlassButton>
         </form>

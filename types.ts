@@ -62,8 +62,7 @@ export interface Complaint {
   customerName: string;
   phoneNumber: string;
   productModel: string;
-  issueType: 'Installation' | 'Complaint';
-  callType?: 'Inbound' | 'Outbound';
+  issueType: 'Installation' | 'Complaint' | 'Store Stock' | 'Store Stack';
   customProductName?: string;
   isResolved: boolean;
   date: string;
