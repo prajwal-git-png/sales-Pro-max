@@ -69,13 +69,20 @@ export const sendCoachMessage = async (
                     parts: [{ text: msg.text }]
                 });
                 lastRole = msg.role;
+            } else {
+                // Append to the last part if role is the same
+                contents[contents.length - 1].parts[0].text += '\n' + msg.text;
             }
         }
 
-        contents.push({
-            role: 'user',
-            parts: [{ text: newMessage }]
-        });
+        if (lastRole === 'user') {
+            contents[contents.length - 1].parts[0].text += '\n' + newMessage;
+        } else {
+            contents.push({
+                role: 'user',
+                parts: [{ text: newMessage }]
+            });
+        }
 
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
@@ -100,9 +107,11 @@ export const sendCoachMessage = async (
     }
 };
 
-export const getMotivationalQuote = async (): Promise<string> => {
+export const getMotivationalQuote = async (apiKey?: string): Promise<string> => {
+    const key = apiKey || process.env.GEMINI_API_KEY;
+    if (!key) return "Success is a series of small wins every day. 💪";
     try {
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+        const ai = new GoogleGenAI({ apiKey: key });
         const response = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: 'Provide one powerful short sales motivation quote (max 10 words) with emoji.',

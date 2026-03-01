@@ -199,6 +199,10 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
                 <label className="text-[10px] font-bold text-zinc-400 uppercase">Employee ID</label>
                 <GlassInput value={editForm.employeeId} onChange={e => setEditForm({...editForm, employeeId: e.target.value})} className="rounded-3xl" />
             </div>
+            <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase">Gemini API Key</label>
+                <GlassInput type="password" placeholder="Enter your Gemini API Key" value={editForm.apiKey || ''} onChange={e => setEditForm({...editForm, apiKey: e.target.value})} className="rounded-3xl" />
+            </div>
         </GlassCard>
 
         {/* Store Location Settings */}

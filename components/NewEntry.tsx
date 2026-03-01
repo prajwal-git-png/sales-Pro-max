@@ -19,8 +19,6 @@ const PRODUCT_LIST = [
     "BAJAJ STORAGE GEYSER PENTACLE 15L",
     "BAJAJ STORAGE GEYSER PENTACLE 25L",
     "BAJAJ WATER HEATER NEWSHAKTI 0742 15L",
-    "BAJAJ WATER HEATER NEWSHAKTI Pro 15L",
-    "BAJAJ WATER HEATER NEWSHAKTI Pro 25L",
     "BAJAJ WATER HEATER NEWSHAKTI 0743 25L",
     "BAJAJ COOKTOP CGX4 ECO GLASS 4 BURNER",
     "BAJAJ UCX 2B- 2 Burner",
@@ -81,6 +79,11 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   const [isWeekOff, setIsWeekOff] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  // Optional Entry Details
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [billId, setBillId] = useState('');
+  const [txnNumber, setTxnNumber] = useState('');
 
   const filteredProducts = searchTerm 
       ? PRODUCT_LIST.filter(p => p.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -176,7 +179,15 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
     if (billImages.length === 0 && !confirm("Save without bill image?")) return;
     
     setIsSubmitting(true);
-    await saveSaleEntry(date, items, billImages);
+    
+    const itemsToSave = items.map(item => ({
+        ...item,
+        customerPhone: customerPhone || undefined,
+        billId: billId || undefined,
+        txnNumber: txnNumber || undefined
+    }));
+
+    await saveSaleEntry(date, itemsToSave, billImages);
     setIsSubmitting(false);
     setShowSuccessModal(true);
   };
@@ -213,6 +224,9 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
       setBillImages([]);
       setDate(new Date().toISOString().split('T')[0]);
       setIsWeekOff(false);
+      setCustomerPhone('');
+      setBillId('');
+      setTxnNumber('');
       setShowSuccessModal(false);
       onEntryComplete();
   };
@@ -339,6 +353,28 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
             )})}
           </div>
           )}
+
+        {!isWeekOff && (
+        <GlassCard className="p-5 rounded-3xl space-y-4">
+            <div className="space-y-3">
+                <p className="font-bold text-zinc-700 dark:text-zinc-200">Optional Details</p>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Customer Phone</label>
+                    <input type="tel" maxLength={10} className="w-full bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/20 rounded-3xl px-4 py-3 text-sm outline-none backdrop-blur-md" placeholder="10-digit number" value={customerPhone} onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))} />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Bill ID</label>
+                        <input type="text" className="w-full bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/20 rounded-3xl px-4 py-3 text-sm outline-none backdrop-blur-md" placeholder="e.g. INV-001" value={billId} onChange={e => setBillId(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Txn Number</label>
+                        <input type="text" className="w-full bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/20 rounded-3xl px-4 py-3 text-sm outline-none backdrop-blur-md" placeholder="e.g. TXN123" value={txnNumber} onChange={e => setTxnNumber(e.target.value)} />
+                    </div>
+                </div>
+            </div>
+        </GlassCard>
+        )}
 
         {!isWeekOff && (
         <GlassCard className="p-5 rounded-3xl">

@@ -125,7 +125,7 @@ const CRM: React.FC<CRMProps> = ({ user }) => {
                            <option value="Installation" className="text-black">Installation</option>
                            <option value="Complaint" className="text-black">Complaint</option>
                            <option value="Store Stock" className="text-black">Store Stock</option>
-                     
+                           <option value="Store Stack" className="text-black">Store Stack</option>
                        </select>
                    </div>
 

@@ -3,6 +3,9 @@ export interface SaleItem {
   productName: string;
   quantity: number;
   price: number;
+  customerPhone?: string;
+  billId?: string;
+  txnNumber?: string;
 }
 
 export interface DailyReport {
