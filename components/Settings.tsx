@@ -4,7 +4,7 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile, StoreLocation } from '../types';
 import { saveUser, getSales, compressImage, exportFullBackup, importFullBackup, BackupPackage } from '../services/storageService';
-import { generateMonthlyExcelReport } from '../services/excelExportService';
+import { ReportAdjuster } from './ReportAdjuster';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -138,21 +138,17 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
       }
   };
 
+  const [showReportAdjuster, setShowReportAdjuster] = useState(false);
+  const [reportSales, setReportSales] = useState<any[]>([]);
+
   const handleExcelExport = async () => {
     if (!backupMonth) {
       alert("Please select a month to export.");
       return;
     }
-    const allSales = await getSales();
-    const [year, month] = backupMonth.split('-');
-    const monthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
-    
-    try {
-      generateMonthlyExcelReport(user, allSales, monthDate);
-    } catch (e) {
-      console.error("Excel export failed:", e);
-      alert("Failed to generate Excel report.");
-    }
+    const sales = await getSales();
+    setReportSales(sales);
+    setShowReportAdjuster(true);
   };
 
   return (
@@ -336,6 +332,15 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
             </div>
             <GlassButton onClick={handleSaveLocation} className="w-full rounded-3xl py-3">Register Location</GlassButton>
         </Modal>
+
+        {showReportAdjuster && backupMonth && (
+            <ReportAdjuster
+                user={user}
+                sales={reportSales}
+                monthDate={new Date(parseInt(backupMonth.split('-')[0]), parseInt(backupMonth.split('-')[1]) - 1, 1)}
+                onClose={() => setShowReportAdjuster(false)}
+            />
+        )}
     </div>
   );
 };

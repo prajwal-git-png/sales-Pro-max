@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
-import { DailyReport, UserProfile } from '../types';
+import { UserProfile } from '../types';
 
 export const BAJAJ_PRODUCTS = [
   { category: 'Mixer', article: '410561', rdArticle: '492391787', description: 'BAJAJ MIXER GRINDER GX15 500W' },
@@ -63,17 +63,11 @@ export const MR_PRODUCTS = [
   { category: 'Irons', article: '500072', rdArticle: '491186076', description: 'Super Glide Steam Iron - 2000W' }
 ];
 
-export const generateMonthlyExcelReport = async (user: UserProfile, sales: DailyReport[], monthDate: Date) => {
+export const generateMonthlyExcelReport = async (user: UserProfile, adjustedData: Record<string, Record<number, number>>, monthDate: Date) => {
   const year = monthDate.getFullYear();
   const month = monthDate.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const monthName = monthDate.toLocaleString('default', { month: 'long', year: 'numeric' });
-
-  // Filter sales for the selected month
-  const monthSales = sales.filter(s => {
-    const d = new Date(s.date);
-    return d.getFullYear() === year && d.getMonth() === month;
-  });
 
   const workbook = new ExcelJS.Workbook();
 
@@ -89,7 +83,6 @@ export const generateMonthlyExcelReport = async (user: UserProfile, sales: Daily
       { width: 15 }, // Brand Article
       { width: 15 }, // RD Article
       { width: 40 }, // Article Description
-      { width: 12 }, // Target Qty
       ...Array.from({ length: 31 }, () => ({ width: 4 })), // Days 1-31
       { width: 12 }  // Total Qty
     ];
@@ -116,11 +109,11 @@ export const generateMonthlyExcelReport = async (user: UserProfile, sales: Daily
 
     // --- Row 1: Title ---
     const row1 = ws.addRow([`${brand} ISP Monthly Target Sheet | Reliance Digital`]);
-    ws.mergeCells(1, 1, 1, 37);
+    ws.mergeCells(1, 1, 1, 36);
     row1.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
     row1.getCell(1).font = { bold: true };
     row1.getCell(1).fill = titleFill;
-    for (let i = 1; i <= 37; i++) row1.getCell(i).border = borderStyle;
+    for (let i = 1; i <= 36; i++) row1.getCell(i).border = borderStyle;
 
     // --- Row 2: Info 1 ---
     const row2 = ws.addRow([
@@ -136,9 +129,9 @@ export const generateMonthlyExcelReport = async (user: UserProfile, sales: Daily
     ws.mergeCells(2, 6, 2, 8); // Store Name value
     ws.mergeCells(2, 10, 2, 12); // Location value
     ws.mergeCells(2, 14, 2, 16); // Reporting LAS value
-    ws.mergeCells(2, 18, 2, 37); // Reporting Manager value
+    ws.mergeCells(2, 18, 2, 36); // Reporting Manager value
 
-    for (let i = 1; i <= 37; i++) {
+    for (let i = 1; i <= 36; i++) {
       const cell = row2.getCell(i);
       cell.border = borderStyle;
       if ([1, 5, 9, 13, 17].includes(i)) {
@@ -148,17 +141,14 @@ export const generateMonthlyExcelReport = async (user: UserProfile, sales: Daily
 
     // --- Row 3: Info 2 ---
     let totalAchieved = 0;
-    monthSales.forEach(daySale => {
-      daySale.items.forEach(item => {
-        if (products.some(p => p.description === item.productName)) {
-          totalAchieved += item.quantity;
-        }
-      });
+    products.forEach(product => {
+      for (let i = 1; i <= daysInMonth; i++) {
+        totalAchieved += adjustedData[product.description]?.[i] || 0;
+      }
     });
 
     const row3 = ws.addRow([
       'Month', monthName, '', '',
-      'Target Qty', user.monthlyTarget || 0, '', '',
       'Achivement', totalAchieved, '', '',
       'LAS Review Rating', '', '', '',
       'Manager Remark', ''
@@ -166,50 +156,49 @@ export const generateMonthlyExcelReport = async (user: UserProfile, sales: Daily
 
     // Merge cells for Row 3
     ws.mergeCells(3, 2, 3, 4); // Month value
-    ws.mergeCells(3, 6, 3, 8); // Target Qty value
-    ws.mergeCells(3, 10, 3, 12); // Achievement value
-    ws.mergeCells(3, 14, 3, 16); // LAS Review Rating value
-    ws.mergeCells(3, 18, 3, 37); // Manager Remark value
+    ws.mergeCells(3, 6, 3, 8); // Achievement value
+    ws.mergeCells(3, 10, 3, 12); // LAS Review Rating value
+    ws.mergeCells(3, 14, 3, 36); // Manager Remark value
 
-    for (let i = 1; i <= 37; i++) {
+    for (let i = 1; i <= 36; i++) {
       const cell = row3.getCell(i);
       cell.border = borderStyle;
-      if ([1, 5, 9, 13, 17].includes(i)) {
+      if ([1, 5, 9, 13].includes(i)) {
         cell.fill = lightGrayFill;
       }
     }
 
     // --- Row 4: Brand Header & Date ---
-    const row4 = ws.addRow([brand, '', '', '', '', 'Date']);
-    ws.mergeCells(4, 1, 4, 5); // Brand
-    ws.mergeCells(4, 6, 4, 36); // Date
+    const row4 = ws.addRow([brand, '', '', '', 'Date']);
+    ws.mergeCells(4, 1, 4, 4); // Brand
+    ws.mergeCells(4, 5, 4, 35); // Date
     row4.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
-    row4.getCell(6).alignment = { horizontal: 'center', vertical: 'middle' };
+    row4.getCell(5).alignment = { horizontal: 'center', vertical: 'middle' };
     row4.getCell(1).fill = lightGrayFill;
-    row4.getCell(6).fill = lightGrayFill;
-    for (let i = 1; i <= 37; i++) row4.getCell(i).border = borderStyle;
+    row4.getCell(5).fill = lightGrayFill;
+    for (let i = 1; i <= 36; i++) row4.getCell(i).border = borderStyle;
 
     // --- Row 5: Headers ---
-    const headers = ['Category', brand === 'Bajaj' ? 'Bajaj Article' : 'MR Article', 'RD Article', 'Article Description', 'Target Qty'];
+    const headers = ['Category', brand === 'Bajaj' ? 'Bajaj Article' : 'MR Article', 'RD Article', 'Article Description'];
     for (let i = 1; i <= 31; i++) headers.push(i.toString());
     headers.push('Total Qty');
     
     const row5 = ws.addRow(headers);
     row5.font = { bold: true };
-    for (let i = 1; i <= 37; i++) {
+    for (let i = 1; i <= 36; i++) {
       const cell = row5.getCell(i);
       cell.border = borderStyle;
       cell.alignment = { horizontal: 'center', vertical: 'middle' };
-      if (i >= 6 && i <= 36) {
+      if (i >= 5 && i <= 35) {
         // Add green triangle to date headers to match image
         cell.font = { bold: true, color: { argb: '000000' } };
       }
     }
 
     // Merge Total Qty vertically
-    ws.mergeCells(4, 37, 5, 37);
-    ws.getCell(4, 37).alignment = { horizontal: 'center', vertical: 'middle' };
-    ws.getCell(4, 37).font = { bold: true };
+    ws.mergeCells(4, 36, 5, 36);
+    ws.getCell(4, 36).alignment = { horizontal: 'center', vertical: 'middle' };
+    ws.getCell(4, 36).font = { bold: true };
 
     // --- Product Rows ---
     const dailyTotals = new Array(31).fill(0);
@@ -221,18 +210,12 @@ export const generateMonthlyExcelReport = async (user: UserProfile, sales: Daily
     let categoryStartRow = 6;
 
     products.forEach((product, index) => {
-      const rowData = [product.category, product.article, product.rdArticle, product.description, ''];
+      const rowData = [product.category, product.article, product.rdArticle, product.description];
       
       let productTotal = 0;
       for (let i = 1; i <= 31; i++) {
         if (i <= daysInMonth) {
-          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-          const daySale = monthSales.find(s => s.date === dateStr);
-          let qty = 0;
-          if (daySale) {
-            const items = daySale.items.filter(item => item.productName === product.description);
-            qty = items.reduce((sum, item) => sum + item.quantity, 0);
-          }
+          const qty = adjustedData[product.description]?.[i] || 0;
           rowData.push(qty > 0 ? qty : '');
           productTotal += qty;
           dailyTotals[i-1] += qty;
@@ -245,10 +228,10 @@ export const generateMonthlyExcelReport = async (user: UserProfile, sales: Daily
       
       const row = ws.addRow(rowData);
       
-      for (let i = 1; i <= 37; i++) {
+      for (let i = 1; i <= 36; i++) {
         const cell = row.getCell(i);
         cell.border = borderStyle;
-        if (i >= 6 && i <= 36) {
+        if (i >= 5 && i <= 35) {
           cell.alignment = { horizontal: 'center', vertical: 'middle' };
         }
       }
@@ -273,7 +256,7 @@ export const generateMonthlyExcelReport = async (user: UserProfile, sales: Daily
     });
     
     // --- Last Row: Totals ---
-    const totalRowData: any[] = ['Total Qty', '', '', '', ''];
+    const totalRowData: any[] = ['Total Qty', '', '', ''];
     for (let i = 1; i <= 31; i++) {
       if (i <= daysInMonth) {
         totalRowData.push(dailyTotals[i-1] > 0 ? dailyTotals[i-1] : '');
@@ -287,10 +270,10 @@ export const generateMonthlyExcelReport = async (user: UserProfile, sales: Daily
     ws.mergeCells(currentRow, 1, currentRow, 4);
     totalRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
     
-    for (let i = 1; i <= 37; i++) {
+    for (let i = 1; i <= 36; i++) {
       const cell = totalRow.getCell(i);
       cell.border = borderStyle;
-      if (i >= 6) {
+      if (i >= 5) {
         cell.alignment = { horizontal: 'center', vertical: 'middle' };
       }
     }
