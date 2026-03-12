@@ -1,9 +1,10 @@
 import { useState, useRef } from 'react';
-import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon } from 'lucide-react';
+import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon, FileSpreadsheet } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile, StoreLocation } from '../types';
 import { saveUser, getSales, compressImage, exportFullBackup, importFullBackup, BackupPackage } from '../services/storageService';
+import { generateMonthlyExcelReport } from '../services/excelExportService';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -135,6 +136,23 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
         printWindow.document.write(`<html><head><title>Report - ${user.name}</title><style>body { font-family: sans-serif; color: #333; padding: 30px; } h1 { color: #000; } .meta { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; } table { width: 100%; border-collapse: collapse; margin-bottom: 30px; } th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 12px; } th { background: #f4f4f4; } .bills-title { font-weight: bold; margin: 40px 0 20px; border-left: 5px solid #000; padding-left: 10px; }</style></head><body><h1>Sales Report</h1><div class="meta"><div><strong>${user.name}</strong> • ${user.storeName}</div><div>Period: ${backupMonth || 'Full History'}</div></div><table><thead><tr><th>Date</th><th>Product Details</th><th>Qty</th><th>Value</th></tr></thead><tbody>${salesToPrint.map(s => `<tr><td>${s.date.split('-').reverse().join('/')}</td><td>${s.isWeekOff ? 'WEEK OFF' : s.items.map(i => `${i.productName} (${i.quantity})`).join('<br>')}</td><td>${s.totalQty}</td><td>₹${s.totalValue.toLocaleString()}</td></tr>`).join('')}</tbody></table>${imagesHtml ? `<div class="bills-title">Attached Bills</div>${imagesHtml}` : ''}<script>window.onload = () => setTimeout(() => window.print(), 800)</script></body></html>`);
         printWindow.document.close();
       }
+  };
+
+  const handleExcelExport = async () => {
+    if (!backupMonth) {
+      alert("Please select a month to export.");
+      return;
+    }
+    const allSales = await getSales();
+    const [year, month] = backupMonth.split('-');
+    const monthDate = new Date(parseInt(year), parseInt(month) - 1, 1);
+    
+    try {
+      generateMonthlyExcelReport(user, allSales, monthDate);
+    } catch (e) {
+      console.error("Excel export failed:", e);
+      alert("Failed to generate Excel report.");
+    }
   };
 
   return (
@@ -278,6 +296,9 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
                 <div className="flex gap-2">
                     <input type="month" value={backupMonth} onChange={(e) => setBackupMonth(e.target.value)} className="flex-1 bg-white/60 dark:bg-zinc-800/60 backdrop-blur-md border border-white/50 dark:border-white/20 rounded-3xl px-4 py-2 text-sm outline-none text-zinc-800 dark:text-white" />
                     <button onClick={handlePrintView} className="px-5 bg-black/90 dark:bg-white/90 backdrop-blur-md text-white dark:text-black rounded-3xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all shadow-sm">PDF</button>
+                    <button onClick={handleExcelExport} className="px-4 bg-emerald-600/90 backdrop-blur-md text-white rounded-3xl active:scale-95 transition-all shadow-sm flex items-center justify-center" title="Export to Excel">
+                        <FileSpreadsheet size={16} />
+                    </button>
                 </div>
             </div>
         </GlassCard>
