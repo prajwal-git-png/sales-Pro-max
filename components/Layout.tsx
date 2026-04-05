@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Home, PlusCircle, Users, Settings, Send, ClipboardCheck, CalendarCheck, MessageSquare } from 'lucide-react';
+import { Home, PlusCircle, Users, Settings, Send, ClipboardCheck, CalendarCheck, MessageSquare, BarChart2 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { Tab, UserProfile, DailyReport } from '../types';
 import { sendCoachMessage, getOfflineResponse, ChatMessage } from '../services/aiService';
 import { Modal } from './ui/GlassComponents';
@@ -84,6 +85,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
   const navItems: { id: Tab; icon: React.ElementType; label: string }[] = [
     { id: 'dashboard', icon: Home, label: 'Home' },
     { id: 'attendance', icon: CalendarCheck, label: 'Attend' },
+    { id: 'performance', icon: BarChart2, label: 'Stats' },
     { id: 'entry', icon: PlusCircle, label: 'Entry' },
     { id: 'eod', icon: ClipboardCheck, label: 'EOD' },
     { id: 'crm', icon: Users, label: 'CRM' },
@@ -144,6 +146,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
                     <div className="flex gap-3 w-full pt-2">
                         <button onClick={(e) => { e.stopPropagation(); setShowCoach(true); setIsIslandExpanded(false); }} className="flex-1 bg-zinc-800 py-3 rounded-3xl flex items-center justify-center gap-2 text-sm font-bold active:scale-95 transition-transform hover:bg-zinc-700">
                             <MessageSquare size={16} />
+                            Open AI Coach
                         </button>
                     </div>
                 </div>
@@ -174,31 +177,45 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
         </div>
       </div>
 
-      <Modal isOpen={showCoach} onClose={() => setShowCoach(false)} title="Sales Coach AI">
-        <div className="flex flex-col h-[60vh] sm:h-[500px]">
-            <div className="flex-1 overflow-y-auto space-y-4 px-1 pb-4 scrollbar-hide">
+      <Modal isOpen={showCoach} onClose={() => setShowCoach(false)} title="AI Sales Coach">
+        <div className="flex flex-col h-[60vh] sm:h-[450px]">
+            <div className="flex-1 overflow-y-auto space-y-4 px-2 pb-4 scrollbar-hide">
                 {messages.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in slide-in-from-bottom-2`}>
-                        <div className={`max-w-[85%] p-3 rounded-3xl text-sm ${msg.role === 'user' ? 'bg-slate-800 dark:bg-zinc-100 text-white dark:text-black rounded-tr-none' : 'bg-white/80 dark:bg-zinc-800/80 backdrop-blur-md text-slate-700 dark:text-slate-200 border border-white/50 dark:border-white/20 shadow-sm rounded-tl-none'}`}>
-                            {msg.text}
+                    <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                        <div className={`max-w-[85%] p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-zinc-900 text-white dark:bg-white dark:text-zinc-900' : 'bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700'}`}>
+                            {msg.role === 'model' ? (
+                                <div className="prose prose-sm dark:prose-invert max-w-none">
+                                    <ReactMarkdown>{msg.text}</ReactMarkdown>
+                                </div>
+                            ) : (
+                                msg.text
+                            )}
                         </div>
                     </div>
                 ))}
-                {isTyping && <div className="flex justify-start animate-pulse"><div className="bg-white/50 dark:bg-zinc-800/50 backdrop-blur-sm border border-white/40 dark:border-white/10 px-4 py-3 rounded-3xl rounded-tl-none text-xs text-slate-500 dark:text-slate-400">Coach is thinking...</div></div>}
+                {isTyping && (
+                    <div className="flex justify-start">
+                        <div className="bg-zinc-100 dark:bg-zinc-800 px-4 py-2 rounded-2xl text-xs text-zinc-500 flex items-center gap-1">
+                            <span className="w-1 h-1 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                            <span className="w-1 h-1 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                            <span className="w-1 h-1 bg-zinc-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                    </div>
+                )}
                 <div ref={messagesEndRef} />
             </div>
-            <div className="pt-3 border-t border-gray-200/50 dark:border-white/10 bg-white/40 dark:bg-black/20 backdrop-blur-md">
-                <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
+            <div className="pt-4 border-t border-zinc-200 dark:border-zinc-800">
+                <form onSubmit={handleSendMessage} className="flex gap-2">
                     <input 
                       value={inputMsg} 
                       onChange={e => setInputMsg(e.target.value)} 
                       placeholder="Ask your coach..." 
-                      className="flex-1 bg-white/60 dark:bg-zinc-800/60 backdrop-blur-md border border-white/50 dark:border-white/20 rounded-3xl px-4 py-2.5 text-sm outline-none focus:ring-2 focus:ring-blue-500/20 text-slate-800 dark:text-white placeholder-slate-500 dark:placeholder-zinc-400" 
+                      className="flex-1 bg-zinc-100 dark:bg-zinc-800 border-none rounded-2xl px-4 py-3 text-sm outline-none focus:ring-2 focus:ring-zinc-500/20" 
                     />
                     <button 
                       type="submit" 
                       disabled={isTyping || !inputMsg.trim()}
-                      className="p-2.5 bg-slate-800 dark:bg-zinc-100 text-white dark:text-black rounded-3xl shadow-sm border border-slate-700 dark:border-zinc-300 transition-transform active:scale-95 disabled:opacity-30"
+                      className="p-3 bg-zinc-900 text-white dark:bg-white dark:text-zinc-900 rounded-2xl disabled:opacity-50"
                     >
                       <Send size={18} />
                     </button>

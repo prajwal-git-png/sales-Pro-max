@@ -71,4 +71,4 @@ export interface Complaint {
   date: string;
 }
 
-export type Tab = 'dashboard' | 'attendance' | 'entry' | 'eod' | 'crm' | 'settings';
+export type Tab = 'dashboard' | 'attendance' | 'entry' | 'eod' | 'crm' | 'settings' | 'performance';

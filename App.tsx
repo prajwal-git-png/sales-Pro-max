@@ -6,6 +6,7 @@ import NewEntry from './components/NewEntry';
 import EOD from './components/EOD';
 import CRM from './components/CRM';
 import Settings from './components/Settings';
+import Performance from './components/Performance';
 import { Tab, UserProfile, DailyReport } from './types';
 import { getUser, logoutUser, getSales, getTheme, saveTheme } from './services/storageService';
 
@@ -121,6 +122,7 @@ const App = () => {
       {activeTab === 'entry' && <NewEntry user={user} onEntryComplete={refreshData} />}
       {activeTab === 'eod' && <EOD user={user} onUpdateUser={setUser} />}
       {activeTab === 'crm' && <CRM user={user} />}
+      {activeTab === 'performance' && <Performance sales={salesData} />}
       {activeTab === 'settings' && <Settings user={user} onUpdateUser={setUser} onLogout={handleLogout} isDark={isDark} toggleTheme={toggleTheme} />}
     </Layout>
   );
