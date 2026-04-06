@@ -1,12 +1,13 @@
 import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry, AttendanceEntry } from '../types';
 
 const DB_NAME = 'SalesTrackDB';
-const DB_VERSION = 2; // Incremented version
+const DB_VERSION = 3; // Incremented version
 const STORES = {
   SALES: 'sales',
   EOD: 'eod',
   CRM: 'crm',
-  ATTENDANCE: 'attendance'
+  ATTENDANCE: 'attendance',
+  IMAGES: 'images'
 };
 
 const LS_KEYS = {
@@ -18,13 +19,49 @@ const LS_KEYS = {
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event: any) => {
       const db = request.result;
+      const transaction = event.currentTarget.transaction;
+      
       if (!db.objectStoreNames.contains(STORES.SALES)) db.createObjectStore(STORES.SALES, { keyPath: 'date' });
       if (!db.objectStoreNames.contains(STORES.EOD)) db.createObjectStore(STORES.EOD, { keyPath: 'date' });
       if (!db.objectStoreNames.contains(STORES.CRM)) db.createObjectStore(STORES.CRM, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(STORES.ATTENDANCE)) db.createObjectStore(STORES.ATTENDANCE, { keyPath: 'date' });
+      if (!db.objectStoreNames.contains(STORES.IMAGES)) db.createObjectStore(STORES.IMAGES, { keyPath: 'date' });
+
+      if (event.oldVersion < 3) {
+        if (db.objectStoreNames.contains(STORES.SALES)) {
+          const salesStore = transaction.objectStore(STORES.SALES);
+          const imagesStore = transaction.objectStore(STORES.IMAGES);
+          
+          salesStore.openCursor().onsuccess = (e: any) => {
+            const cursor = e.target.result;
+            if (cursor) {
+              const sale = cursor.value;
+              const images = sale.billImages || (sale.billImage ? [sale.billImage] : []);
+              if (images.length > 0) {
+                imagesStore.put({ date: sale.date, images });
+              }
+              delete sale.billImages;
+              delete sale.billImage;
+              cursor.update(sale);
+              cursor.continue();
+            }
+          };
+        }
+      }
     };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const getFromStore = async <T>(storeName: string, key: string): Promise<T | undefined> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(storeName, 'readonly');
+    const store = transaction.objectStore(storeName);
+    const request = store.get(key);
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
@@ -90,49 +127,95 @@ export const getTheme = (): 'light' | 'dark' => (localStorage.getItem(LS_KEYS.TH
 export const saveTheme = (theme: 'light' | 'dark') => localStorage.setItem(LS_KEYS.THEME, theme);
 
 // --- Sales ---
+export const getSalesWithoutImages = async (): Promise<DailyReport[]> => {
+  return getAllFromStore<DailyReport>(STORES.SALES);
+};
+
+export const getSalesByMonth = async (monthPrefix: string): Promise<DailyReport[]> => {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORES.SALES, 'readonly');
+    const store = transaction.objectStore(STORES.SALES);
+    const request = store.openCursor();
+    const results: DailyReport[] = [];
+
+    request.onsuccess = (event: any) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        if (cursor.value.date.startsWith(monthPrefix)) {
+          results.push(cursor.value);
+        }
+        cursor.continue();
+      } else {
+        resolve(results);
+      }
+    };
+    request.onerror = () => reject(request.error);
+  });
+};
+
 export const getSales = (): Promise<DailyReport[]> => getAllFromStore<DailyReport>(STORES.SALES);
 
+export const getImagesForDate = async (date: string): Promise<string[]> => {
+  const record = await getFromStore<{date: string, images: string[]}>(STORES.IMAGES, date);
+  return record?.images || [];
+};
+
 export const saveSaleEntry = async (date: string, newItems: SaleItem[], newBillImages: string[] = []) => {
-  const sales = await getSales();
-  const existing = sales.find(s => s.date === date);
+  const existing = await getFromStore<DailyReport>(STORES.SALES, date);
+  const existingImagesRecord = await getFromStore<{date: string, images: string[]}>(STORES.IMAGES, date);
 
   const calculateTotals = (items: SaleItem[]) => ({
     totalQty: items.reduce((acc, item) => acc + item.quantity, 0),
     totalValue: items.reduce((acc, item) => acc + (item.price * item.quantity), 0),
   });
 
+  const existingImages = existingImagesRecord?.images || [];
+  const mergedImages = [...existingImages, ...newBillImages];
+
+  if (mergedImages.length > 0) {
+    await putToStore(STORES.IMAGES, { date, images: mergedImages });
+  }
+
   if (existing) {
     const updatedItems = [...existing.items, ...newItems];
     const { totalQty, totalValue } = calculateTotals(updatedItems);
-    const existingImages = existing.billImages || (existing.billImage ? [existing.billImage] : []);
-    const mergedImages = [...existingImages, ...newBillImages];
 
-    await putToStore(STORES.SALES, {
+    const reportToSave = {
       ...existing,
       items: updatedItems,
       totalQty,
       totalValue,
-      billImages: mergedImages,
-      billImage: undefined,
-    });
+    };
+    delete reportToSave.billImages;
+    delete reportToSave.billImage;
+
+    await putToStore(STORES.SALES, reportToSave);
   } else {
     const { totalQty, totalValue } = calculateTotals(newItems);
-    await putToStore(STORES.SALES, {
+    const reportToSave: DailyReport = {
       date,
       items: newItems,
       totalQty,
       totalValue,
-      billImages: newBillImages,
-    });
+    };
+    await putToStore(STORES.SALES, reportToSave);
   }
 };
 
-export const updateDailyReport = async (_date: string, updatedReport: DailyReport) => {
-  await putToStore(STORES.SALES, updatedReport);
+export const updateDailyReport = async (date: string, updatedReport: DailyReport) => {
+  const reportToSave = { ...updatedReport };
+  if (reportToSave.billImages !== undefined) {
+    await putToStore(STORES.IMAGES, { date, images: reportToSave.billImages });
+    delete reportToSave.billImages;
+    delete reportToSave.billImage;
+  }
+  await putToStore(STORES.SALES, reportToSave);
 };
 
 export const deleteDailyReport = async (date: string) => {
   await deleteFromStore(STORES.SALES, date);
+  await deleteFromStore(STORES.IMAGES, date);
 };
 
 // --- EOD ---
@@ -174,21 +257,109 @@ export interface BackupPackage {
   }
 }
 
-export const exportFullBackup = async (): Promise<string> => {
-  const packageData: BackupPackage = {
-    app: 'SalesTrack',
-    version: '8.0.0',
-    timestamp: new Date().toISOString(),
-    data: {
-      user: getUser(),
-      sales: await getSales(),
-      eod: await getEODEntries(),
-      crm: await getComplaints(),
-      attendance: await getAttendance(),
-      theme: localStorage.getItem(LS_KEYS.THEME) || 'light'
-    }
-  };
-  return JSON.stringify(packageData);
+export const exportFullBackup = async (): Promise<void> => {
+  const user = getUser();
+  const eod = await getEODEntries();
+  const crm = await getComplaints();
+  const attendance = await getAttendance();
+  const theme = localStorage.getItem(LS_KEYS.THEME) || 'light';
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `SalesTrack_Backup_${timestamp}.json`;
+
+  // Try streaming if supported (Desktop Chrome/Edge)
+  if ('showSaveFilePicker' in window) {
+      try {
+          const handle = await (window as any).showSaveFilePicker({
+              suggestedName: filename,
+              types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }],
+          });
+          const writable = await handle.createWritable();
+          await writable.write(`{"app":"SalesTrack","version":"8.0.0","timestamp":"${new Date().toISOString()}","data":{"user":${JSON.stringify(user)},"theme":"${theme}","eod":${JSON.stringify(eod)},"crm":${JSON.stringify(crm)},"attendance":${JSON.stringify(attendance)},"sales":[`);
+          
+          const db = await openDB();
+          await new Promise<void>((resolve, reject) => {
+              const transaction = db.transaction([STORES.SALES, STORES.IMAGES], 'readonly');
+              const salesStore = transaction.objectStore(STORES.SALES);
+              const imagesStore = transaction.objectStore(STORES.IMAGES);
+              
+              const request = salesStore.openCursor();
+              let isFirst = true;
+
+              request.onsuccess = async (event: any) => {
+                  const cursor = event.target.result;
+                  if (cursor) {
+                      const sale = cursor.value;
+                      const imgReq = imagesStore.get(sale.date);
+                      imgReq.onsuccess = async () => {
+                          sale.billImages = imgReq.result?.images || [];
+                          if (!isFirst) await writable.write(',');
+                          await writable.write(JSON.stringify(sale));
+                          isFirst = false;
+                          cursor.continue();
+                      };
+                  } else {
+                      resolve();
+                  }
+              };
+              request.onerror = () => reject(request.error);
+          });
+          
+          await writable.write(`]}}`);
+          await writable.close();
+          return;
+      } catch (err: any) {
+          if (err.name !== 'AbortError') {
+              console.error('Streaming backup failed, falling back to Blob', err);
+          } else {
+              return; // User cancelled
+          }
+      }
+  }
+
+  // Fallback to Blob (Mobile / Safari)
+  const parts: BlobPart[] = [];
+  parts.push(`{"app":"SalesTrack","version":"8.0.0","timestamp":"${new Date().toISOString()}","data":{"user":${JSON.stringify(user)},"theme":"${theme}","eod":${JSON.stringify(eod)},"crm":${JSON.stringify(crm)},"attendance":${JSON.stringify(attendance)},"sales":[`);
+  
+  const db = await openDB();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction([STORES.SALES, STORES.IMAGES], 'readonly');
+    const salesStore = transaction.objectStore(STORES.SALES);
+    const imagesStore = transaction.objectStore(STORES.IMAGES);
+    
+    const request = salesStore.openCursor();
+    let isFirst = true;
+
+    request.onsuccess = (event: any) => {
+      const cursor = event.target.result;
+      if (cursor) {
+        const sale = cursor.value;
+        const imgReq = imagesStore.get(sale.date);
+        imgReq.onsuccess = () => {
+            sale.billImages = imgReq.result?.images || [];
+            if (!isFirst) parts.push(',');
+            parts.push(new Blob([JSON.stringify(sale)], { type: 'application/json' }));
+            isFirst = false;
+            cursor.continue();
+        };
+      } else {
+        resolve();
+      }
+    };
+    request.onerror = () => reject(request.error);
+  });
+  
+  parts.push(`]}}`);
+
+  const blob = new Blob(parts, { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 };
 
 export const importFullBackup = async (jsonString: string): Promise<{ success: boolean; message: string }> => {
@@ -205,9 +376,20 @@ export const importFullBackup = async (jsonString: string): Promise<{ success: b
     await clearStore(STORES.EOD);
     await clearStore(STORES.CRM);
     await clearStore(STORES.ATTENDANCE);
+    await clearStore(STORES.IMAGES);
 
     if (user) saveUser(user);
-    if (sales) for (const s of sales) await putToStore(STORES.SALES, s);
+    if (sales) {
+        for (const s of sales) {
+            const images = s.billImages || (s.billImage ? [s.billImage] : []);
+            if (images.length > 0) {
+                await putToStore(STORES.IMAGES, { date: s.date, images });
+            }
+            delete s.billImages;
+            delete s.billImage;
+            await putToStore(STORES.SALES, s);
+        }
+    }
     if (eod) for (const e of eod) await putToStore(STORES.EOD, e);
     if (crm) for (const c of crm) await putToStore(STORES.CRM, c);
     if (attendance) for (const a of attendance) await putToStore(STORES.ATTENDANCE, a);
@@ -221,9 +403,50 @@ export const importFullBackup = async (jsonString: string): Promise<{ success: b
 
 export const compressImage = (file: File): Promise<string> => {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => resolve(event.target?.result as string);
-    reader.onerror = error => reject(error);
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl); // Free memory
+      const canvas = document.createElement('canvas');
+      const MAX_WIDTH = 600;
+      const MAX_HEIGHT = 600;
+      let width = img.width;
+      let height = img.height;
+
+      if (width > height) {
+        if (width > MAX_WIDTH) {
+          height *= MAX_WIDTH / width;
+          width = MAX_WIDTH;
+        }
+      } else {
+        if (height > MAX_HEIGHT) {
+          width *= MAX_HEIGHT / height;
+          height = MAX_HEIGHT;
+        }
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(img, 0, 0, width, height);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.5); // Compress to 50% quality JPEG
+        resolve(dataUrl);
+      } else {
+        // Fallback if canvas context fails
+        const reader = new FileReader();
+        reader.onload = (e) => resolve(e.target?.result as string);
+        reader.onerror = (e) => reject(e);
+        reader.readAsDataURL(file);
+      }
+    };
+    
+    img.onerror = (error) => {
+      URL.revokeObjectURL(objectUrl);
+      reject(error);
+    };
+    
+    img.src = objectUrl;
   });
 };

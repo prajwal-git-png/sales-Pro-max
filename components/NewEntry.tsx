@@ -155,8 +155,8 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
     if (isWeekOff) {
         if(confirm("Mark " + formatToDisplayDate(date) + " as Week Off?")) {
             setIsSubmitting(true);
-            const sales = await getSales();
-            const existing = sales.find(s => s.date === date);
+            const { getFromStore, updateDailyReport } = await import('../services/storageService');
+            const existing = await getFromStore<any>('sales', date);
             const updatedReport = {
               date,
               items: [],
@@ -167,7 +167,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
             };
             await saveSaleEntry(date, [], []); // Basic save for weekoff
             // We use the direct storage call to force weekoff status
-            const { updateDailyReport } = await import('../services/storageService');
             await updateDailyReport(date, updatedReport);
 
             setIsSubmitting(false);
@@ -193,10 +192,10 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   };
 
   const handleShareWhatsApp = async () => {
-      const allSales = await getSales();
+      const { getSalesWithoutImages } = await import('../services/storageService');
+      const allSales = await getSalesWithoutImages();
       const report = allSales.find(s => s.date === date);
       if (report) {
-          // Fix: Pass allSales as 3rd argument
           const text = generateTextReport(user, report, allSales);
           window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
       }
@@ -208,10 +207,10 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
           alert('Week Off report copied');
           return;
       }
-      const allSales = await getSales();
+      const { getSalesWithoutImages } = await import('../services/storageService');
+      const allSales = await getSalesWithoutImages();
       const report = allSales.find(s => s.date === date);
       if (report) {
-          // Fix: Pass allSales as 3rd argument
           const text = generateTextReport(user, report, allSales);
           navigator.clipboard.writeText(text);
           alert('Report copied!');

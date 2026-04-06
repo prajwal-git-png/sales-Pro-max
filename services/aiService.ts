@@ -1,77 +1,71 @@
 import { GoogleGenAI } from "@google/genai";
 import { UserProfile, DailyReport } from "../types";
+import { BAJAJ_PRODUCTS, MR_PRODUCTS } from "./excelExportService";
 
 export interface ChatMessage {
     role: 'user' | 'model';
     text: string;
 }
 
-const getSystemInstruction = (user: UserProfile, sales: DailyReport[]) => {
-    // Calculate total sales by product
-    const productSales: Record<string, number> = {};
-    let totalSalesValue = 0;
-    let totalSalesQty = 0;
+const ALL_PRODUCTS = [...BAJAJ_PRODUCTS, ...MR_PRODUCTS];
 
-    sales.forEach(report => {
-        totalSalesValue += report.totalValue;
-        totalSalesQty += report.totalQty;
-        report.items.forEach(item => {
-            if (!productSales[item.productName]) {
-                productSales[item.productName] = 0;
-            }
-            productSales[item.productName] += item.quantity;
+const getSpecificCategory = (name: string) => {
+    const product = ALL_PRODUCTS.find(p => p.description.toLowerCase() === name.toLowerCase());
+    if (product) return product.category;
+    
+    const n = name.toLowerCase();
+    if (n.includes('cooler')) return 'Coolers';
+    if (n.includes('mixer') || n.includes('mg ')) return 'Mixer';
+    if (n.includes('geyser') || n.includes('heater')) return 'Geyser';
+    if (n.includes('iron')) return 'Irons';
+    if (n.includes('induction')) return 'Induction';
+    if (n.includes('microwave') || n.includes('mws')) return 'MWO';
+    if (n.includes('otg')) return 'OTG';
+    if (n.includes('air fryer')) return 'Air Fryer';
+    if (n.includes('processor') || n.includes('fp')) return 'FP';
+    if (n.includes('blender') || n.includes('hb')) return 'HB';
+    if (n.includes('toaster') || n.includes('sandwich')) return 'Toaster, SWM, HB';
+    if (n.includes('stove') || n.includes('cooktop') || n.includes('hob')) return 'Gas Stove';
+    
+    return 'Uncategorized';
+};
+
+const getBroadCategory = (specificCategory: string, name: string) => {
+    const s = specificCategory.toLowerCase();
+    if (s.includes('mixer') || s.includes('fp') || s.includes('hb') || s.includes('toaster') || s.includes('induction') || s.includes('gas stove') || s.includes('mwo') || s.includes('otg') || s.includes('air fryer')) return 'Kitchen Care';
+    if (s.includes('iron') || s.includes('cooler') || s.includes('geyser') || s.includes('room heater')) return 'Home Care';
+    
+    const n = name.toLowerCase();
+    if (n.includes('hob') || n.includes('chimney') || n.includes('oven') || n.includes('dishwasher')) return 'Integrated Kitchen';
+    
+    return 'Others';
+};
+
+const getSystemInstruction = (user: UserProfile, sales: DailyReport[]) => {
+    let dataText = "Date | Broad Category | Specific Category | Product | Qty | Price\n";
+    sales.forEach(s => {
+        s.items.forEach(i => {
+            const specific = getSpecificCategory(i.productName);
+            const broad = getBroadCategory(specific, i.productName);
+            dataText += `${s.date} | ${broad} | ${specific} | ${i.productName} | ${i.quantity} | ${i.price}\n`;
         });
     });
 
-    const productBreakdown = Object.entries(productSales)
-        .map(([name, qty]) => `- ${name}: ${qty} units`)
-        .join('\n');
+    const today = new Date().toISOString().split('T')[0];
 
-    const recentSales = [...sales]
-        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-        .slice(0, 7); // Last 7 days
+    return `You are a direct, concise Sales Data Assistant for ${user.name} at ${user.storeName}.
+    
+### Raw Sales Data (CSV Format):
+${dataText || 'No sales data available yet.'}
 
-    const salesSummary = recentSales.map(s => {
-        const itemDetails = s.items.map(i => `${i.productName} (${i.quantity})`).join(', ');
-        return `Date: ${s.date}, Total: ₹${s.totalValue}, Qty: ${s.totalQty}. Items: ${itemDetails}`;
-    }).join('\n');
-
-    return `You are an intelligent, friendly, and analytical Bajaj Electricals Sales Assistant.
-Executive: ${user.name} at ${user.storeName}.
-
-### Sales Data Context
-You have access to the user's sales data. Use this to answer their questions accurately.
-Total Sales Value: ₹${totalSalesValue}
-Total Units Sold: ${totalSalesQty}
-
-**Overall Product Breakdown (All Time):**
-${productBreakdown || 'No products sold yet.'}
-
-**Recent Sales History (Last 7 Days):**
-${salesSummary || 'No recent sales recorded.'}
-
-### Guidelines:
-1. Be casual, friendly, and approachable. Use natural language.
-2. When asked about sales data (e.g., "how many coolers did I sell?"), look at the "Overall Product Breakdown" and "Recent Sales History" above.
-3. **CRITICAL**: If asked about a category, you MUST use these definitions:
-   - **Kitchen Care**: Mixers, Grinders, Juicers, Induction, Toasters, Sandwich Makers, Kettles.
-   - **Home Care**: Irons, Fans, Coolers, Geysers, Heaters, Air Purifiers, Vacuums.
-   - **Integrated Kitchen**: Built-in Hobs, Chimneys, Ovens, Microwaves, Dishwashers.
-   - **Others**: Any other products.
-   - When reporting:
-     - Identify all models that belong to the requested category.
-     - Provide a breakdown of each model's sales.
-     - Provide the TOTAL sales for that category.
-     - Example: "You've sold 7 items in Kitchen Care this week! Breakdown: 2 units of GX-1 Mixer, 5 units of Induction Cooktop."
-4. Provide clear, concise reports using bullet points for readability.
-5. Focus on helping with sales techniques, product features, and handling customer objections.
-6. Highlight Bajaj's strengths (durability, service, trust) naturally.
-
-### Response Rules:
-- Keep it conversational and easy to read.
-- Use emojis to keep the mood light. 🌟
-- Use markdown (bolding, lists) for clarity.
-- If data is missing for a specific query, say so politely and offer what you DO have.`;
+### Rules:
+1. Answer directly based ONLY on the data above.
+2. If asked for a number (e.g., "how many coolers sold last week"), calculate the exact number from the data and give the answer immediately.
+3. No fluff, no long greetings, no generic advice unless explicitly asked.
+4. Use the 'Date' column to filter for "this week", "last week", etc. Note that weeks are calculated from Monday to Sunday. Today is ${today}.
+5. Use the 'Broad Category' column to group items (Kitchen Care, Home Care, Integrated Kitchen, Others).
+6. Use the 'Specific Category' column to answer questions about specific types of products like Coolers, Mixers, Geysers, etc.
+7. Example: "You sold 5 Coolers last week (3 Model A, 2 Model B)."`;
 };
 
 export const sendCoachMessage = async (

@@ -8,7 +8,7 @@ import CRM from './components/CRM';
 import Settings from './components/Settings';
 import Performance from './components/Performance';
 import { Tab, UserProfile, DailyReport } from './types';
-import { getUser, logoutUser, getSales, getTheme, saveTheme } from './services/storageService';
+import { getUser, logoutUser, getSalesWithoutImages, getTheme, saveTheme } from './services/storageService';
 
 const App = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -29,7 +29,7 @@ const App = () => {
       const storedUser = getUser();
       if (storedUser) {
         setUser(storedUser);
-        const storedSales = await getSales();
+        const storedSales = await getSalesWithoutImages();
         setSalesData(storedSales);
       }
       
@@ -59,7 +59,7 @@ const App = () => {
   };
 
   const refreshData = async () => {
-    const storedSales = await getSales();
+    const storedSales = await getSalesWithoutImages();
     setSalesData(storedSales);
   };
 

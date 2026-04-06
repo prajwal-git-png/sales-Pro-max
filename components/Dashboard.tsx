@@ -196,6 +196,14 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
 
   const getReportImages = (report: DailyReport) => { return report.billImages || (report.billImage ? [report.billImage] : []); };
 
+  const handleDateSelect = async (report: DailyReport) => {
+      const { getFromStore, getImagesForDate } = await import('../services/storageService');
+      const fullReport = await getFromStore<DailyReport>('sales', report.date);
+      const images = await getImagesForDate(report.date);
+      const reportWithImages = fullReport || report;
+      setSelectedDateReport({ ...reportWithImages, billImages: images });
+  };
+
   return (
     <div className="space-y-6">
       <GlassCard className="p-4 bg-gradient-to-r from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-800 animate-in slide-in-from-top-4 duration-500 border-l-4 border-l-yellow-400 shadow-lg rounded-3xl">
@@ -231,7 +239,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
               const isToday = d.dateStr === new Date().toISOString().split('T')[0];
               const isWeekOff = report?.isWeekOff;
               return (
-                <div key={d.dateStr} onClick={() => report ? setSelectedDateReport(report) : null} style={{ animationDelay: `${i * 0.04}s` }} className={`aspect-square rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all border shadow-sm relative overflow-hidden animate-in zoom-in fade-in duration-300 fill-mode-backwards ${isToday ? 'border-zinc-900 dark:border-white ring-1 ring-zinc-200 dark:ring-zinc-700' : 'border-white/40 dark:border-white/10 hover:bg-white/40 dark:hover:bg-white/10'} ${report ? (isWeekOff ? 'bg-gray-200/80 dark:bg-gray-800/80' : 'bg-white/60 dark:bg-zinc-800/80') : 'bg-white/20 dark:bg-zinc-900/20'}`}>
+                <div key={d.dateStr} onClick={() => report ? handleDateSelect(report) : null} style={{ animationDelay: `${i * 0.04}s` }} className={`aspect-square rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all border shadow-sm relative overflow-hidden animate-in zoom-in fade-in duration-300 fill-mode-backwards ${isToday ? 'border-zinc-900 dark:border-white ring-1 ring-zinc-200 dark:ring-zinc-700' : 'border-white/40 dark:border-white/10 hover:bg-white/40 dark:hover:bg-white/10'} ${report ? (isWeekOff ? 'bg-gray-200/80 dark:bg-gray-800/80' : 'bg-white/60 dark:bg-zinc-800/80') : 'bg-white/20 dark:bg-zinc-900/20'}`}>
                   <span className={`text-xs ${isToday ? 'font-bold text-black dark:text-white' : ''}`}>{d.day}</span>
                   {report && <span className={`text-[9px] font-bold mt-0.5 ${isWeekOff ? 'text-gray-500' : 'text-green-600 dark:text-green-400'}`}>{isWeekOff ? 'OFF' : `${report.totalQty}u`}</span>}
                 </div>
@@ -250,7 +258,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
             )}
           </div>
           {[...filteredSales].map((report, i) => (
-              <GlassCard key={report.date} className="p-4 animate-in slide-in-from-bottom-4 duration-500 rounded-3xl" onClick={() => setSelectedDateReport(report)} style={{ animationDelay: `${i * 0.05}s` }}>
+              <GlassCard key={report.date} className="p-4 animate-in slide-in-from-bottom-4 duration-500 rounded-3xl" onClick={() => handleDateSelect(report)} style={{ animationDelay: `${i * 0.05}s` }}>
                 <div className="flex justify-between items-center"><div><p className="font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">{formatToDisplayDate(report.date)}{report.isWeekOff && <span className="text-[10px] bg-zinc-200/80 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 rounded-3xl border border-zinc-300 dark:border-zinc-600">OFF</span>}</p><p className="text-sm text-zinc-500">{report.isWeekOff ? 'Week Off' : `${report.totalQty} items • ₹${report.totalValue.toLocaleString()}`}</p></div><div className="h-8 w-8 bg-white/50 dark:bg-zinc-800/50 border border-white/40 dark:border-white/20 rounded-3xl flex items-center justify-center text-black dark:text-white"><List size={16} /></div></div>
              </GlassCard>
           ))}

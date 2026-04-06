@@ -83,17 +83,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
 
   const triggerFullBackup = async () => {
     try {
-        const data = await exportFullBackup();
-        const blob = new Blob([data], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        a.href = url;
-        a.download = `SalesTrack_Backup_${timestamp}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        await exportFullBackup();
     } catch (e) {
         alert("Backup failed.");
     }
@@ -125,15 +115,25 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
   };
 
   const handlePrintView = async () => {
-      const allSales = await getSales();
-      let salesToPrint = allSales;
-      if (backupMonth) { salesToPrint = allSales.filter(s => s.date.startsWith(backupMonth)); }
+      const { getSalesWithoutImages, getSalesByMonth, getImagesForDate } = await import('../services/storageService');
+      let salesToPrint = [];
+      if (backupMonth) { 
+          const sales = await getSalesByMonth(backupMonth); 
+          // Fetch images for these sales
+          salesToPrint = await Promise.all(sales.map(async (s) => {
+              const images = await getImagesForDate(s.date);
+              return { ...s, billImages: images };
+          }));
+      } else {
+          salesToPrint = await getSalesWithoutImages();
+      }
+      
       if (salesToPrint.length === 0) { alert("No records for this period."); return; }
       salesToPrint.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         const imagesHtml = salesToPrint.filter(s => (s.billImages || (s.billImage ? [s.billImage] : [])).length > 0).map(s => `<div class="bill-group" style="margin-bottom: 25px; border: 1px solid #eee; padding: 15px; border-radius: 8px; page-break-inside: avoid;"><div style="font-weight: bold; border-bottom: 1px solid #f0f0f0; margin-bottom: 10px; padding-bottom: 5px;">Date: ${s.date.split('-').reverse().join('/')}</div><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">${(s.billImages || (s.billImage ? [s.billImage] : [])).map(img => `<img src="${img}" style="width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;" />`).join('')}</div></div>`).join('');
-        printWindow.document.write(`<html><head><title>Report - ${user.name}</title><style>body { font-family: sans-serif; color: #333; padding: 30px; } h1 { color: #000; } .meta { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; } table { width: 100%; border-collapse: collapse; margin-bottom: 30px; } th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 12px; } th { background: #f4f4f4; } .bills-title { font-weight: bold; margin: 40px 0 20px; border-left: 5px solid #000; padding-left: 10px; }</style></head><body><h1>Sales Report</h1><div class="meta"><div><strong>${user.name}</strong> • ${user.storeName}</div><div>Period: ${backupMonth || 'Full History'}</div></div><table><thead><tr><th>Date</th><th>Product Details</th><th>Qty</th><th>Value</th></tr></thead><tbody>${salesToPrint.map(s => `<tr><td>${s.date.split('-').reverse().join('/')}</td><td>${s.isWeekOff ? 'WEEK OFF' : s.items.map(i => `${i.productName} (${i.quantity})`).join('<br>')}</td><td>${s.totalQty}</td><td>₹${s.totalValue.toLocaleString()}</td></tr>`).join('')}</tbody></table>${imagesHtml ? `<div class="bills-title">Attached Bills</div>${imagesHtml}` : ''}<script>window.onload = () => setTimeout(() => window.print(), 800)</script></body></html>`);
+        printWindow.document.write(`<html><head><title>Report - ${user.name}</title><style>body { font-family: sans-serif; color: #333; padding: 30px; } h1 { color: #000; } .meta { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; } table { width: 100%; border-collapse: collapse; margin-bottom: 30px; } th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 12px; } th { background: #f4f4f4; } .bills-title { font-weight: bold; margin: 40px 0 20px; border-left: 5px solid #000; padding-left: 10px; }</style></head><body><h1>Sales Report</h1><div class="meta"><div><strong>${user.name}</strong> • ${user.storeName}</div><div>Period: ${backupMonth || 'Full History (Images omitted for full history)'}</div></div><table><thead><tr><th>Date</th><th>Product Details</th><th>Qty</th><th>Value</th></tr></thead><tbody>${salesToPrint.map(s => `<tr><td>${s.date.split('-').reverse().join('/')}</td><td>${s.isWeekOff ? 'WEEK OFF' : s.items.map(i => `${i.productName} (${i.quantity})`).join('<br>')}</td><td>${s.totalQty}</td><td>₹${s.totalValue.toLocaleString()}</td></tr>`).join('')}</tbody></table>${imagesHtml ? `<div class="bills-title">Attached Bills</div>${imagesHtml}` : ''}<script>window.onload = () => setTimeout(() => window.print(), 800)</script></body></html>`);
         printWindow.document.close();
       }
   };
@@ -146,7 +146,8 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
       alert("Please select a month to export.");
       return;
     }
-    const sales = await getSales();
+    const { getSalesWithoutImages } = await import('../services/storageService');
+    const sales = await getSalesWithoutImages();
     setReportSales(sales);
     setShowReportAdjuster(true);
   };
