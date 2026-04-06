@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Image as ImageIcon, RefreshCcw } from 'lucide-react';
 import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
 import { SaleItem, UserProfile } from '../types';
-import { saveSaleEntry, compressImage, getSales } from '../services/storageService';
+import { saveSaleEntry, compressImage } from '../services/storageService';
 import { generateTextReport, formatToDisplayDate } from '../services/reportService';
 
 const PRODUCT_LIST = [
@@ -84,6 +84,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [billId, setBillId] = useState('');
   const [txnNumber, setTxnNumber] = useState('');
+  const [notes, setNotes] = useState('');
 
   const filteredProducts = searchTerm 
       ? PRODUCT_LIST.filter(p => p.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -131,6 +132,67 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
       updateItem(index, 'productName', name);
       setActiveSearchIndex(null);
       setSearchTerm('');
+  };
+
+  const [isScanning, setIsScanning] = useState(false);
+
+  const handleScanBill = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      try {
+        setIsScanning(true);
+        const file = e.target.files[0];
+        const base64 = await compressImage(file);
+        
+        // Add to images list
+        setBillImages(prev => [...prev, base64]);
+
+        const { extractDataFromBill } = await import('../services/aiService');
+        const extracted = await extractDataFromBill(base64, user);
+
+        if (extracted) {
+            if (extracted.date) setDate(extracted.date);
+            if (extracted.customerPhone) setCustomerPhone(extracted.customerPhone);
+            if (extracted.billId) setBillId(extracted.billId);
+            if (extracted.txnNumber) setTxnNumber(extracted.txnNumber);
+            if (extracted.rawText) setNotes(extracted.rawText);
+
+            if (extracted.items && extracted.items.length > 0) {
+                const newItems = extracted.items.map((item, idx) => ({
+                    id: (Date.now() + idx).toString(),
+                    productName: item.productName,
+                    quantity: item.quantity,
+                    price: item.price
+                }));
+                setItems(newItems);
+                setInputModes(newItems.map(() => 'unit'));
+            }
+
+            if (extracted.isGeyserFound) {
+                const { saveComplaint } = await import('../services/storageService');
+                const geyserItem = extracted.items.find(i => i.productName.toLowerCase().includes('geyser') || i.productName.toLowerCase().includes('water heater'));
+                
+                const complaint: any = {
+                    id: Date.now().toString(),
+                    customerName: extracted.customerName || 'Extracted Customer',
+                    phoneNumber: extracted.customerPhone || '',
+                    productModel: geyserItem?.productName || 'Geyser',
+                    issueType: 'Installation',
+                    isResolved: false,
+                    date: extracted.date || new Date().toISOString().split('T')[0]
+                };
+                await saveComplaint(complaint);
+                alert("Geyser detected! 🚿 Installation ticket has been automatically raised in CRM.");
+            } else {
+                alert("Bill scanned successfully! ✅ Data populated.");
+            }
+        }
+      } catch (err: any) {
+        alert(err.message || 'Error scanning bill');
+      } finally {
+        setIsScanning(false);
+        e.target.value = ''; // Reset file input
+      }
+    }
   };
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -186,7 +248,17 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
         txnNumber: txnNumber || undefined
     }));
 
+    const { updateDailyReport, getFromStore } = await import('../services/storageService');
     await saveSaleEntry(date, itemsToSave, billImages);
+    
+    // Update notes if present
+    if (notes) {
+        const existing = await getFromStore<any>('sales', date);
+        if (existing) {
+            await updateDailyReport(date, { ...existing, notes });
+        }
+    }
+
     setIsSubmitting(false);
     setShowSuccessModal(true);
   };
@@ -226,6 +298,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
       setCustomerPhone('');
       setBillId('');
       setTxnNumber('');
+      setNotes('');
       setShowSuccessModal(false);
       onEntryComplete();
   };
@@ -371,6 +444,10 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                         <input type="text" className="w-full bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/20 rounded-3xl px-4 py-3 text-sm outline-none backdrop-blur-md" placeholder="e.g. TXN123" value={txnNumber} onChange={e => setTxnNumber(e.target.value)} />
                     </div>
                 </div>
+                <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Extracted Text / Notes</label>
+                    <textarea className="w-full bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/20 rounded-3xl px-4 py-3 text-sm outline-none backdrop-blur-md min-h-[100px] resize-none" placeholder="Extracted text from bill will appear here..." value={notes} onChange={e => setNotes(e.target.value)} />
+                </div>
             </div>
         </GlassCard>
         )}
@@ -383,6 +460,11 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                     <p className="text-xs text-zinc-500">{billImages.length} selected</p>
                 </div>
                 <div className="flex gap-2">
+                    <label className={`cursor-pointer bg-blue-600 dark:bg-blue-500 text-white px-3 py-1.5 rounded-3xl text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 hover:bg-blue-700 transition-colors shadow-sm ${isScanning ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                        {isScanning ? <RefreshCcw size={14} className="animate-spin" /> : <Search size={14} />} 
+                        {isScanning ? 'Scanning...' : 'Scan Bill'}
+                        <input type="file" accept="image/*" onChange={handleScanBill} className="hidden" disabled={isScanning} />
+                    </label>
                     <label className="cursor-pointer bg-white/60 dark:bg-zinc-800/60 backdrop-blur-md border border-white/50 dark:border-white/20 text-zinc-600 dark:text-zinc-300 px-3 py-1.5 rounded-3xl text-xs font-bold uppercase tracking-wide flex items-center gap-1.5 hover:bg-white/80 dark:hover:bg-zinc-700/80 transition-colors shadow-sm">
                         <Camera size={14} /> Add
                         <input type="file" multiple accept="image/*" onChange={handleImageUpload} className="hidden" />

@@ -17,6 +17,7 @@ export interface DailyReport {
   /** @deprecated use billImages instead */
   billImage?: string; 
   isWeekOff?: boolean;
+  notes?: string;
 }
 
 export interface StoreEODEntry {

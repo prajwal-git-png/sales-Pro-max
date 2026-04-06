@@ -3,7 +3,7 @@ import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, 
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile, StoreLocation } from '../types';
-import { saveUser, getSales, compressImage, exportFullBackup, importFullBackup, BackupPackage } from '../services/storageService';
+import { saveUser, compressImage, exportFullBackup, importFullBackup, BackupPackage } from '../services/storageService';
 import { ReportAdjuster } from './ReportAdjuster';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
