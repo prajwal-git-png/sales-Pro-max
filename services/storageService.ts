@@ -1,13 +1,14 @@
-import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry, AttendanceEntry } from '../types';
+import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry, AttendanceEntry, FollowUp } from '../types';
 
 const DB_NAME = 'SalesTrackDB';
-const DB_VERSION = 3; // Incremented version
+const DB_VERSION = 4; // Incremented version
 const STORES = {
   SALES: 'sales',
   EOD: 'eod',
   CRM: 'crm',
   ATTENDANCE: 'attendance',
-  IMAGES: 'images'
+  IMAGES: 'images',
+  FOLLOWUPS: 'followups'
 };
 
 const LS_KEYS = {
@@ -28,6 +29,7 @@ const openDB = (): Promise<IDBDatabase> => {
       if (!db.objectStoreNames.contains(STORES.CRM)) db.createObjectStore(STORES.CRM, { keyPath: 'id' });
       if (!db.objectStoreNames.contains(STORES.ATTENDANCE)) db.createObjectStore(STORES.ATTENDANCE, { keyPath: 'date' });
       if (!db.objectStoreNames.contains(STORES.IMAGES)) db.createObjectStore(STORES.IMAGES, { keyPath: 'date' });
+      if (!db.objectStoreNames.contains(STORES.FOLLOWUPS)) db.createObjectStore(STORES.FOLLOWUPS, { keyPath: 'id' });
 
       if (event.oldVersion < 3) {
         if (db.objectStoreNames.contains(STORES.SALES)) {
@@ -234,6 +236,18 @@ export const saveComplaint = async (complaint: Complaint) => {
 };
 export const updateComplaint = async (updated: Complaint) => {
   await putToStore(STORES.CRM, updated);
+};
+
+// --- FollowUps ---
+export const getFollowUps = (): Promise<FollowUp[]> => getAllFromStore<FollowUp>(STORES.FOLLOWUPS);
+export const saveFollowUp = async (followUp: FollowUp) => {
+  await putToStore(STORES.FOLLOWUPS, followUp);
+};
+export const updateFollowUp = async (updated: FollowUp) => {
+  await putToStore(STORES.FOLLOWUPS, updated);
+};
+export const deleteFollowUp = async (id: string) => {
+  await deleteFromStore(STORES.FOLLOWUPS, id);
 };
 
 // --- Attendance ---

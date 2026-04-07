@@ -61,6 +61,14 @@ export interface UserProfile {
   };
 }
 
+export type ComplaintStatus = 'Raised' | 'In progress' | 'Technician assigned' | 'Resolved';
+
+export interface ComplaintTimelineEvent {
+  status: ComplaintStatus;
+  date: string; // ISO string
+  note?: string;
+}
+
 export interface Complaint {
   id: string;
   customerName: string;
@@ -68,8 +76,23 @@ export interface Complaint {
   productModel: string;
   issueType: 'Installation' | 'Complaint' | 'Store Stock' | 'Store Stack';
   customProductName?: string;
-  isResolved: boolean;
+  status: ComplaintStatus;
+  timeline: ComplaintTimelineEvent[];
   date: string;
+  repairsDone?: string;
+  partsReplaced?: string;
+  /** @deprecated use status === 'Resolved' */
+  isResolved?: boolean;
+}
+
+export interface FollowUp {
+  id: string;
+  customerName: string;
+  phoneNumber: string;
+  reminderDate: string; // YYYY-MM-DD
+  note: string;
+  isCompleted: boolean;
+  createdAt: string;
 }
 
 export type Tab = 'dashboard' | 'attendance' | 'entry' | 'eod' | 'crm' | 'settings' | 'performance';
