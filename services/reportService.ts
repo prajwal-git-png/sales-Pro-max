@@ -55,7 +55,16 @@ export const generateTextReport = (user: UserProfile, report: DailyReport, allSa
   const bajajDryIronQty = getQty(['bajaj', 'dry', 'iron']);
   const bajajInductionQty = getQty(['bajaj', 'induction']);
   const bajajSandwichQty = getQty(['bajaj', 'sandwich']);
-  const bajajCoolerQty = getQty(['bajaj', 'cooler']) + getQty(['bajaj', 'air cooler']); // Adding cooler just in case, though not in list
+  const bajajCoolerQty = report.items.reduce((acc, item) => {
+      const name = item.productName.toLowerCase();
+      const isCooler = name.includes('cooler') || 
+                       name.includes('glanza') || 
+                       name.includes('elevate') || 
+                       name.includes('shield') || 
+                       name.includes('mighty') || 
+                       name.includes('tmh50');
+      return isCooler ? acc + item.quantity : acc;
+  }, 0);
 
   // Formatting Function to ensure 2 digits (e.g., 01, 05)
   const fmt = (num: number) => String(num).padStart(2, '0');
@@ -64,15 +73,15 @@ export const generateTextReport = (user: UserProfile, report: DailyReport, allSa
   text += `Morphy Mixer Qty: =${fmt(morphyMixerQty)}\n`;
   text += `Storage geyser Qty: ${fmt(storageGeyserQty)}\n`;
   text += `Instant geyser Qty: ${fmt(instantGeyserQty)}\n`;
-  text += `MR Air fiyar=${fmt(mrAirFryerQty)}\n`;
+  text += `MR Air fryer=${fmt(mrAirFryerQty)}\n`;
   text += `MR. OTG 60ltr =${fmt(mrOtg60Qty)}\n`;
   text += `MR. OTG 29ltr = ${fmt(mrOtg29Qty)}\n`;
   text += `MR 20MWS = ${fmt(mrMicrowaveQty)}\n`;
-  text += `Bajaj  setma  iron =${fmt(bajajSteamIronQty)}\n`;
+  text += `Bajaj  steam  iron =${fmt(bajajSteamIronQty)}\n`;
   text += `Bajaj dry iron=${fmt(bajajDryIronQty)}\n`;
   text += `Bajaj induction${fmt(bajajInductionQty)}\n`;
   text += `Bajaj sandwich maker=${fmt(bajajSandwichQty)}\n`;
-  text += `Bajaj collar=${fmt(bajajCoolerQty)}\n`;
+  text += `Bajaj cooler=${fmt(bajajCoolerQty)}\n`;
   
   text += `MTD Sale Value = ${mtdValue.toLocaleString()}`;
   return text;
