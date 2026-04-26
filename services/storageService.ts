@@ -267,6 +267,7 @@ export interface BackupPackage {
     eod: StoreEODEntry[];
     crm: Complaint[];
     attendance?: AttendanceEntry[];
+    followups?: FollowUp[];
     theme: string;
   }
 }
@@ -276,10 +277,19 @@ export const exportFullBackup = async (): Promise<void> => {
   const eod = await getEODEntries();
   const crm = await getComplaints();
   const attendance = await getAttendance();
+  const followups = await getFollowUps();
   const theme = localStorage.getItem(LS_KEYS.THEME) || 'light';
 
   const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const filename = `SalesTrack_Backup_${timestamp}.json`;
+
+  const db = await openDB();
+  const salesKeys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+    const transaction = db.transaction(STORES.SALES, 'readonly');
+    const request = transaction.objectStore(STORES.SALES).getAllKeys();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
 
   // Try streaming if supported (Desktop Chrome/Edge)
   if ('showSaveFilePicker' in window) {
@@ -289,35 +299,19 @@ export const exportFullBackup = async (): Promise<void> => {
               types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }],
           });
           const writable = await handle.createWritable();
-          await writable.write(`{"app":"SalesTrack","version":"8.0.0","timestamp":"${new Date().toISOString()}","data":{"user":${JSON.stringify(user)},"theme":"${theme}","eod":${JSON.stringify(eod)},"crm":${JSON.stringify(crm)},"attendance":${JSON.stringify(attendance)},"sales":[`);
+          await writable.write(`{"app":"SalesTrack","version":"8.0.0","timestamp":"${new Date().toISOString()}","data":{"user":${JSON.stringify(user)},"theme":"${theme}","eod":${JSON.stringify(eod)},"crm":${JSON.stringify(crm)},"attendance":${JSON.stringify(attendance)},"followups":${JSON.stringify(followups)},"sales":[`);
           
-          const db = await openDB();
-          await new Promise<void>((resolve, reject) => {
-              const transaction = db.transaction([STORES.SALES, STORES.IMAGES], 'readonly');
-              const salesStore = transaction.objectStore(STORES.SALES);
-              const imagesStore = transaction.objectStore(STORES.IMAGES);
-              
-              const request = salesStore.openCursor();
-              let isFirst = true;
-
-              request.onsuccess = async (event: any) => {
-                  const cursor = event.target.result;
-                  if (cursor) {
-                      const sale = cursor.value;
-                      const imgReq = imagesStore.get(sale.date);
-                      imgReq.onsuccess = async () => {
-                          sale.billImages = imgReq.result?.images || [];
-                          if (!isFirst) await writable.write(',');
-                          await writable.write(JSON.stringify(sale));
-                          isFirst = false;
-                          cursor.continue();
-                      };
-                  } else {
-                      resolve();
-                  }
-              };
-              request.onerror = () => reject(request.error);
-          });
+          let isFirst = true;
+          for (const key of salesKeys) {
+              const sale = await getFromStore<DailyReport>(STORES.SALES, key as string);
+              if (sale) {
+                  const imgRec = await getFromStore<{date: string, images: string[]}>(STORES.IMAGES, key as string);
+                  sale.billImages = imgRec?.images || [];
+                  if (!isFirst) await writable.write(',');
+                  await writable.write(JSON.stringify(sale));
+                  isFirst = false;
+              }
+          }
           
           await writable.write(`]}}`);
           await writable.close();
@@ -333,35 +327,19 @@ export const exportFullBackup = async (): Promise<void> => {
 
   // Fallback to Blob (Mobile / Safari)
   const parts: BlobPart[] = [];
-  parts.push(`{"app":"SalesTrack","version":"8.0.0","timestamp":"${new Date().toISOString()}","data":{"user":${JSON.stringify(user)},"theme":"${theme}","eod":${JSON.stringify(eod)},"crm":${JSON.stringify(crm)},"attendance":${JSON.stringify(attendance)},"sales":[`);
+  parts.push(`{"app":"SalesTrack","version":"8.0.0","timestamp":"${new Date().toISOString()}","data":{"user":${JSON.stringify(user)},"theme":"${theme}","eod":${JSON.stringify(eod)},"crm":${JSON.stringify(crm)},"attendance":${JSON.stringify(attendance)},"followups":${JSON.stringify(followups)},"sales":[`);
   
-  const db = await openDB();
-  await new Promise<void>((resolve, reject) => {
-    const transaction = db.transaction([STORES.SALES, STORES.IMAGES], 'readonly');
-    const salesStore = transaction.objectStore(STORES.SALES);
-    const imagesStore = transaction.objectStore(STORES.IMAGES);
-    
-    const request = salesStore.openCursor();
-    let isFirst = true;
-
-    request.onsuccess = (event: any) => {
-      const cursor = event.target.result;
-      if (cursor) {
-        const sale = cursor.value;
-        const imgReq = imagesStore.get(sale.date);
-        imgReq.onsuccess = () => {
-            sale.billImages = imgReq.result?.images || [];
-            if (!isFirst) parts.push(',');
-            parts.push(new Blob([JSON.stringify(sale)], { type: 'application/json' }));
-            isFirst = false;
-            cursor.continue();
-        };
-      } else {
-        resolve();
+  let isFirst = true;
+  for (const key of salesKeys) {
+      const sale = await getFromStore<DailyReport>(STORES.SALES, key as string);
+      if (sale) {
+          const imgRec = await getFromStore<{date: string, images: string[]}>(STORES.IMAGES, key as string);
+          sale.billImages = imgRec?.images || [];
+          if (!isFirst) parts.push(',');
+          parts.push(JSON.stringify(sale));
+          isFirst = false;
       }
-    };
-    request.onerror = () => reject(request.error);
-  });
+  }
   
   parts.push(`]}}`);
 
@@ -382,7 +360,7 @@ export const importFullBackup = async (jsonString: string): Promise<{ success: b
     if (parsed.app !== 'SalesTrack' || !parsed.data) {
       return { success: false, message: 'Invalid file format.' };
     }
-    const { user, sales, eod, crm, attendance, theme } = parsed.data;
+    const { user, sales, eod, crm, attendance, followups, theme } = parsed.data;
     
     // Clear all
     localStorage.removeItem(LS_KEYS.USER);
@@ -390,6 +368,7 @@ export const importFullBackup = async (jsonString: string): Promise<{ success: b
     await clearStore(STORES.EOD);
     await clearStore(STORES.CRM);
     await clearStore(STORES.ATTENDANCE);
+    await clearStore(STORES.FOLLOWUPS);
     await clearStore(STORES.IMAGES);
 
     if (user) saveUser(user);
@@ -407,6 +386,7 @@ export const importFullBackup = async (jsonString: string): Promise<{ success: b
     if (eod) for (const e of eod) await putToStore(STORES.EOD, e);
     if (crm) for (const c of crm) await putToStore(STORES.CRM, c);
     if (attendance) for (const a of attendance) await putToStore(STORES.ATTENDANCE, a);
+    if (followups) for (const f of followups) await putToStore(STORES.FOLLOWUPS, f);
     if (theme) saveTheme(theme as 'light' | 'dark');
 
     return { success: true, message: 'Backup restored successfully!' };
