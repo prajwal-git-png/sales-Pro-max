@@ -81,11 +81,16 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
       }
   };
 
+  const [isBackingUp, setIsBackingUp] = useState(false);
+
   const triggerFullBackup = async () => {
     try {
+        setIsBackingUp(true);
         await exportFullBackup();
-    } catch (e) {
-        alert("Backup failed.");
+    } catch (e: any) {
+        alert("Backup failed. " + (e.message || String(e)));
+    } finally {
+        setIsBackingUp(false);
     }
   };
 
@@ -99,19 +104,39 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
           const content = event.target?.result as string;
           const parsed = JSON.parse(content) as BackupPackage;
           if (parsed.app !== 'SalesTrack') { alert("Invalid backup file."); return; }
-          setRestoreSummary({ salesCount: parsed.data.sales.length, crmCount: parsed.data.crm.length, eodCount: parsed.data.eod.length, userName: parsed.data.user?.name || 'Unknown', date: new Date(parsed.timestamp).toLocaleString() });
+          setRestoreSummary({ 
+              salesCount: parsed.data.sales?.length || 0, 
+              crmCount: parsed.data.crm?.length || 0, 
+              eodCount: parsed.data.eod?.length || 0, 
+              userName: parsed.data.user?.name || 'Unknown', 
+              date: new Date(parsed.timestamp).toLocaleString() 
+          });
           setPendingBackupData(content);
           setShowRestoreModal(true);
-      } catch (err) { alert("Error reading file."); }
+      } catch (err: any) { alert("Error reading file: " + err.message); }
       e.target.value = '';
     };
     reader.readAsText(file);
   };
 
+  const [isRestoring, setIsRestoring] = useState(false);
+
   const confirmRestore = async () => {
     if (!pendingBackupData) return;
-    const result = await importFullBackup(pendingBackupData);
-    if (result.success) { window.location.reload(); } else { alert(result.message); setShowRestoreModal(false); }
+    setIsRestoring(true);
+    try {
+        const result = await importFullBackup(pendingBackupData);
+        if (result.success) { 
+            window.location.reload(); 
+        } else { 
+            alert(result.message); 
+            setShowRestoreModal(false); 
+        }
+    } catch (err: any) {
+        alert("Restore failed: " + (err.message || String(err)));
+    } finally {
+        setIsRestoring(false);
+    }
   };
 
   const handlePrintView = async () => {
@@ -277,9 +302,9 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
         <h3 className="font-bold text-lg px-2 flex items-center gap-2"><Database size={18} className="text-indigo-500" /> Data & Reports</h3>
         <GlassCard className="p-5 space-y-4 rounded-3xl">
             <div className="grid grid-cols-2 gap-3">
-                <button onClick={triggerFullBackup} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-white/60 dark:bg-zinc-800/60 backdrop-blur-md border border-white/50 dark:border-white/20 shadow-sm hover:scale-[1.02] transition-all group">
-                    <Download size={24} className="text-indigo-600 dark:text-indigo-400" />
-                    <span className="text-[10px] font-black uppercase text-zinc-600 dark:text-zinc-300">Backup JSON</span>
+                <button onClick={triggerFullBackup} disabled={isBackingUp} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-white/60 dark:bg-zinc-800/60 backdrop-blur-md border border-white/50 dark:border-white/20 shadow-sm hover:scale-[1.02] transition-all group disabled:opacity-50 disabled:pointer-events-none">
+                    {isBackingUp ? <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin"></div> : <Download size={24} className="text-indigo-600 dark:text-indigo-400" />}
+                    <span className="text-[10px] font-black uppercase text-zinc-600 dark:text-zinc-300">{isBackingUp ? "GENERATING..." : "Backup JSON"}</span>
                 </button>
                 <button onClick={() => fileInputRef.current?.click()} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-white/60 dark:bg-zinc-800/60 backdrop-blur-md border border-white/50 dark:border-white/20 shadow-sm hover:scale-[1.02] transition-all group">
                     <Upload size={24} className="text-amber-600 dark:text-amber-400" />
@@ -317,8 +342,10 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
                     </div>
                 )}
                 <div className="flex gap-3">
-                    <GlassButton onClick={confirmRestore} className="flex-1 !bg-amber-600/90 !border-amber-500 rounded-3xl text-white">Confirm</GlassButton>
-                    <GlassButton onClick={() => setShowRestoreModal(false)} variant="secondary" className="flex-1 rounded-3xl">Cancel</GlassButton>
+                    <GlassButton disabled={isRestoring} onClick={confirmRestore} className="flex-1 !bg-amber-600/90 !border-amber-500 rounded-3xl text-white disabled:opacity-50">
+                        {isRestoring ? "Restoring..." : "Confirm"}
+                    </GlassButton>
+                    <GlassButton disabled={isRestoring} onClick={() => setShowRestoreModal(false)} variant="secondary" className="flex-1 rounded-3xl disabled:opacity-50">Cancel</GlassButton>
                 </div>
             </div>
         </Modal>

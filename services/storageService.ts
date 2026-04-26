@@ -273,85 +273,100 @@ export interface BackupPackage {
 }
 
 export const exportFullBackup = async (): Promise<void> => {
-  const user = getUser();
-  const eod = await getEODEntries();
-  const crm = await getComplaints();
-  const attendance = await getAttendance();
-  const followups = await getFollowUps();
-  const theme = localStorage.getItem(LS_KEYS.THEME) || 'light';
+  try {
+    const user = getUser();
+    const eod = await getEODEntries();
+    const crm = await getComplaints();
+    const attendance = await getAttendance();
+    const followups = await getFollowUps();
+    const theme = localStorage.getItem(LS_KEYS.THEME) || 'light';
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const filename = `SalesTrack_Backup_${timestamp}.json`;
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `SalesTrack_Backup_${timestamp}.json`;
 
-  const db = await openDB();
-  const salesKeys = await new Promise<IDBValidKey[]>((resolve, reject) => {
-    const transaction = db.transaction(STORES.SALES, 'readonly');
-    const request = transaction.objectStore(STORES.SALES).getAllKeys();
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
+    const db = await openDB();
+    const salesKeys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+        const transaction = db.transaction(STORES.SALES, 'readonly');
+        const request = transaction.objectStore(STORES.SALES).getAllKeys();
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
 
-  // Try streaming if supported (Desktop Chrome/Edge)
-  if ('showSaveFilePicker' in window) {
-      try {
-          const handle = await (window as any).showSaveFilePicker({
-              suggestedName: filename,
-              types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }],
-          });
-          const writable = await handle.createWritable();
-          await writable.write(`{"app":"SalesTrack","version":"8.0.0","timestamp":"${new Date().toISOString()}","data":{"user":${JSON.stringify(user)},"theme":"${theme}","eod":${JSON.stringify(eod)},"crm":${JSON.stringify(crm)},"attendance":${JSON.stringify(attendance)},"followups":${JSON.stringify(followups)},"sales":[`);
-          
-          let isFirst = true;
-          for (const key of salesKeys) {
-              const sale = await getFromStore<DailyReport>(STORES.SALES, key as string);
-              if (sale) {
-                  const imgRec = await getFromStore<{date: string, images: string[]}>(STORES.IMAGES, key as string);
-                  sale.billImages = imgRec?.images || [];
-                  if (!isFirst) await writable.write(',');
-                  await writable.write(JSON.stringify(sale));
-                  isFirst = false;
-              }
-          }
-          
-          await writable.write(`]}}`);
-          await writable.close();
-          return;
-      } catch (err: any) {
-          if (err.name !== 'AbortError') {
-              console.error('Streaming backup failed, falling back to Blob', err);
-          } else {
-              return; // User cancelled
-          }
-      }
+    const parts: BlobPart[] = [];
+    parts.push(`{"app":"SalesTrack","version":"8.0.0","timestamp":"${new Date().toISOString()}","data":{"user":${JSON.stringify(user)},"theme":"${theme}","eod":${JSON.stringify(eod)},"crm":${JSON.stringify(crm)},"attendance":${JSON.stringify(attendance)},"followups":${JSON.stringify(followups)},"sales":[`);
+    
+    let isFirst = true;
+    for (const key of salesKeys) {
+        const sale = await getFromStore<DailyReport>(STORES.SALES, key as string);
+        if (sale) {
+            const imgRec = await getFromStore<{date: string, images: string[]}>(STORES.IMAGES, key as string);
+            sale.billImages = imgRec?.images || [];
+            if (!isFirst) parts.push(',');
+            parts.push(JSON.stringify(sale));
+            isFirst = false;
+        }
+    }
+    
+    parts.push(`]}}`);
+
+    const blob = new Blob(parts, { type: 'application/json' });
+
+    // Try sharing first on mobile
+    if (navigator.canShare) {
+        const file = new File([blob], filename, { type: 'application/json' });
+        if (navigator.canShare({ files: [file] })) {
+            try {
+                await navigator.share({
+                    files: [file],
+                    title: filename,
+                    text: 'SalesTrack Full Backup'
+                });
+                return;
+            } catch (err: any) {
+                if (err.name !== 'AbortError') {
+                    console.error('Share failed', err);
+                } else {
+                    return; // user cancelled share
+                }
+            }
+        }
+    }
+
+    // Try streaming if supported (Desktop Chrome/Edge)
+    if ('showSaveFilePicker' in window) {
+        try {
+            const handle = await (window as any).showSaveFilePicker({
+                suggestedName: filename,
+                types: [{ description: 'JSON File', accept: {'application/json': ['.json']} }],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return;
+        } catch (err: any) {
+            if (err.name !== 'AbortError') {
+                console.error('Streaming backup failed, falling back to Blob', err);
+            } else {
+                return; // User cancelled
+            }
+        }
+    }
+
+    // Fallback to Blob download (Desktop Safari / old browsers)
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 1000);
+  } catch (error) {
+    console.error("Backup failed", error);
+    throw error;
   }
-
-  // Fallback to Blob (Mobile / Safari)
-  const parts: BlobPart[] = [];
-  parts.push(`{"app":"SalesTrack","version":"8.0.0","timestamp":"${new Date().toISOString()}","data":{"user":${JSON.stringify(user)},"theme":"${theme}","eod":${JSON.stringify(eod)},"crm":${JSON.stringify(crm)},"attendance":${JSON.stringify(attendance)},"followups":${JSON.stringify(followups)},"sales":[`);
-  
-  let isFirst = true;
-  for (const key of salesKeys) {
-      const sale = await getFromStore<DailyReport>(STORES.SALES, key as string);
-      if (sale) {
-          const imgRec = await getFromStore<{date: string, images: string[]}>(STORES.IMAGES, key as string);
-          sale.billImages = imgRec?.images || [];
-          if (!isFirst) parts.push(',');
-          parts.push(JSON.stringify(sale));
-          isFirst = false;
-      }
-  }
-  
-  parts.push(`]}}`);
-
-  const blob = new Blob(parts, { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 };
 
 export const importFullBackup = async (jsonString: string): Promise<{ success: boolean; message: string }> => {
