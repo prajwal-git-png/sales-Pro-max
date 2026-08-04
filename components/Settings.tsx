@@ -216,7 +216,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
             </div>
             <button 
                 onClick={toggleTheme}
-                className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 relative ${isDark ? 'bg-zinc-700' : 'bg-zinc-200'}`}
+                className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 relative ${isDark ? 'bg-zinc-700' : 'bg-zinc-300'}`}
             >
                 <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transform transition-transform duration-300 flex items-center justify-center ${isDark ? 'translate-x-6' : 'translate-x-0'}`}>
                     {isDark ? <Moon size={12} className="text-zinc-800" /> : <Sun size={12} className="text-yellow-500" />}

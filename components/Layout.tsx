@@ -93,9 +93,9 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
   ];
 
   return (
-    <div className="flex flex-col min-h-screen relative overflow-hidden font-sans bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-100 dark:bg-zinc-950 dark:bg-none text-zinc-800 dark:text-zinc-100 transition-colors duration-500">
-      <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-400/20 dark:bg-blue-900/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="fixed bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-purple-400/20 dark:bg-purple-900/10 rounded-full blur-[100px] pointer-events-none" />
+    <div className="flex flex-col min-h-screen relative overflow-hidden font-sans bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100 transition-colors duration-500">
+      <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-500/10 dark:bg-blue-600/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="fixed bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-purple-500/10 dark:bg-purple-600/10 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Dynamic Island Header */}
       <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
@@ -163,14 +163,13 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
       </main>
 
       <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4">
-        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-3xl border border-white/60 dark:border-white/10 shadow-md rounded-3xl px-3 py-2 flex items-center gap-1 sm:gap-4 overflow-x-auto max-w-full no-scrollbar">
+        <div className="bg-white/60 dark:bg-zinc-900/60 backdrop-blur-3xl border border-white/50 dark:border-white/10 shadow-lg rounded-3xl px-3 py-2 flex items-center gap-1 sm:gap-4 overflow-x-auto max-w-full no-scrollbar">
             {navItems.map((item) => {
               const isActive = activeTab === item.id;
               return (
                 <button key={item.id} onClick={() => onTabChange(item.id)} className={`relative flex flex-col items-center justify-center transition-all min-w-[50px] ${isActive ? 'text-zinc-900 dark:text-white scale-110' : 'text-zinc-500 dark:text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}>
-                  <div className={`p-2 rounded-3xl ${isActive ? 'bg-zinc-200/50 dark:bg-white/10' : ''}`}><item.icon size={20} /></div>
-                  {isActive && <span className="absolute -bottom-1 w-1 h-1 bg-zinc-900 dark:bg-white rounded-full" />}
-                  <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5">{item.label}</span>
+                  <div className={`p-2 rounded-3xl transition-colors duration-300 ${isActive ? 'bg-zinc-900/5 dark:bg-white/10' : ''}`}><item.icon size={22} strokeWidth={isActive ? 2.5 : 2} /></div>
+                  <span className="text-[10px] font-medium tracking-tight mt-1">{item.label}</span>
                 </button>
               );
             })}
