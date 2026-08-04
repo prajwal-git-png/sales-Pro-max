@@ -65,29 +65,29 @@ const App = () => {
 
   if (isLoading) {
     return (
-      <div className="h-screen w-screen flex flex-col items-center justify-center bg-zinc-50 dark:bg-zinc-950 transition-colors duration-1000 overflow-hidden relative">
-        <div className="absolute top-[-15%] left-[-10%] w-[110vw] h-[110vw] bg-blue-500/5 dark:bg-blue-500/10 rounded-full blur-[120px] animate-float" />
-        <div className="absolute bottom-[-15%] right-[-10%] w-[90vw] h-[90vw] bg-purple-500/5 dark:bg-purple-500/10 rounded-full blur-[120px] animate-float" style={{ animationDelay: '-3s' }} />
+      <div className="h-screen w-screen flex flex-col items-center justify-center bg-zinc-100 dark:bg-zinc-950 transition-colors duration-1000 overflow-hidden">
+        <div className="absolute top-[-15%] left-[-10%] w-[110vw] h-[110vw] bg-zinc-500/10 rounded-2xl blur-[140px] animate-float opacity-40" />
+        <div className="absolute bottom-[-15%] right-[-10%] w-[90vw] h-[90vw] bg-zinc-500/10 rounded-2xl blur-[140px] animate-float opacity-40" style={{ animationDelay: '-3s' }} />
 
         <div className="relative z-10 flex flex-col items-center gap-12 animate-reveal">
           <div className="relative w-28 h-28">
-            <div className="absolute inset-0 bg-zinc-900/5 dark:bg-white/10 blur-2xl scale-110 rounded-3xl" />
-            <div className="relative h-full w-full bg-white/60 dark:bg-zinc-900/60 backdrop-blur-xl border border-white/50 dark:border-white/10 rounded-[28px] shadow-lg flex items-center justify-center">
-               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="w-16 h-16 text-zinc-900 dark:text-white">
-                 <path d="M35 65 L50 35 L65 65" fill="none" stroke="currentColor" strokeWidth="6" strokeLinecap="round" strokeLinejoin="round" />
+            <div className="absolute inset-0 bg-black/10 dark:bg-white/10 blur-2xl scale-110 rounded-2xl" />
+            <div className="relative h-full w-full bg-black dark:bg-white rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex items-center justify-center">
+               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="w-12 h-12 text-white dark:text-black">
+                 <path d="M35 65 L50 35 L65 65" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
                </svg>
             </div>
           </div>
 
           <div className="flex flex-col items-center space-y-8">
-            <h1 className="text-4xl font-bold tracking-tight text-zinc-900 dark:text-white">
+            <h1 className="text-4xl font-extrabold tracking-tighter text-zinc-900 dark:text-white">
               SalesTrack
             </h1>
             <div className="relative w-8 h-8">
               {[...Array(12)].map((_, i) => (
                 <div 
                   key={i} 
-                  className="absolute left-[14px] top-0 w-[3px] h-[8px] bg-zinc-400 dark:bg-zinc-600 rounded-full animate-ios-loader origin-[50%_16px]" 
+                  className="absolute left-[14px] top-0 w-[4px] h-[10px] bg-zinc-400 dark:bg-zinc-600 rounded-full animate-ios-loader origin-[50%_16px]" 
                   style={{ 
                     transform: `rotate(${i * 30}deg)`,
                     animationDelay: `${(i - 12) * 0.1}s`
@@ -96,6 +96,13 @@ const App = () => {
               ))}
             </div>
           </div>
+        </div>
+        
+        <div className="absolute bottom-16 flex flex-col items-center gap-1">
+          <p className="text-[10px] font-bold tracking-[0.4em] uppercase text-zinc-400">
+            Powered by AI
+          </p>
+          <div className="w-12 h-[1px] bg-zinc-200 dark:bg-zinc-800" />
         </div>
       </div>
     );

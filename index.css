@@ -1,12 +1,11 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --font-serif: "Inter", system-ui, -apple-system, sans-serif;
+  --font-sans: "Playfair Display", serif;
+  --font-serif: "Playfair Display", serif;
   
   --color-glass-100: rgba(255, 255, 255, 0.1);
   --color-glass-200: rgba(255, 255, 255, 0.2);
@@ -54,6 +53,7 @@
 body {
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  font-family: "Playfair Display", serif;
   user-select: none;
   -webkit-user-select: none;
 }
