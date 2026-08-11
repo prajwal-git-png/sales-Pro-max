@@ -97,10 +97,8 @@ const EOD: React.FC<EODProps> = ({ user, onUpdateUser }) => {
     };
 
     const handleDelete = async (d: string) => {
-        if (confirm("Delete this EOD record?")) {
-            await deleteEODEntry(d);
-            await refreshHistory();
-        }
+        await deleteEODEntry(d);
+        await refreshHistory();
     };
 
     const calendarDays = useMemo(() => {

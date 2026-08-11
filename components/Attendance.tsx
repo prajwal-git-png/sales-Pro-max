@@ -91,16 +91,16 @@ const Attendance: React.FC<AttendanceProps> = ({ user }) => {
   const handleMarkAttendance = async (type: 'Present' | 'Week Off' | 'Leave') => {
     if (type === 'Present') {
         if (!user.storeLocation) {
-            alert("Please set your store location in Settings first.");
+            console.log("Please set your store location in Settings first.");
             return;
         }
         if (!currentLocation) {
-            alert("Waiting for location... Please try again in a moment.");
+            console.log("Waiting for location... Please try again in a moment.");
             getLocation();
             return;
         }
         if (distance && distance > 200) { // 200 meters radius
-            alert(`You are ${Math.round(distance)}m away from the store. You need to be within 200m to mark Present.`);
+            console.log(`You are ${Math.round(distance)}m away from the store. You need to be within 200m to mark Present.`);
             return;
         }
     }

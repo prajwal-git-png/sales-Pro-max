@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Store, Send } from 'lucide-react';
-import { DailyReport, SaleItem, UserProfile } from '../types';
+import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Store, Send, Package, ClipboardList } from 'lucide-react';
+import { DailyReport, SaleItem, UserProfile, Complaint } from '../types';
 import { GlassCard, GlassButton, GlassInput, Modal } from './ui/GlassComponents';
 import { generateTextReport, generateStoreEODReport, formatToDisplayDate } from '../services/reportService';
-import { deleteDailyReport, updateDailyReport, saveUser } from '../services/storageService';
+import { deleteDailyReport, updateDailyReport, saveUser, getComplaints } from '../services/storageService';
 import { getMotivationalQuote } from '../services/aiService';
 
 // Fix: Added missing DashboardProps interface
@@ -49,8 +49,9 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
   const [filters, setFilters] = useState({ productName: '', date: '', minQty: '', minPrice: '' });
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
   const [editItemState, setEditItemState] = useState<SaleItem | null>(null);
+  const [complaints, setComplaints] = useState<Complaint[]>([]);
   
-  useEffect(() => { getMotivationalQuote(user.apiKey).then(setQuote); }, [user.apiKey]);
+  useEffect(() => { getMotivationalQuote(user.apiKey).then(setQuote); getComplaints().then(setComplaints); }, [user.apiKey]);
   useEffect(() => { setEodForm(prev => ({ ...prev, dayTarget: user.customTargets?.daily || prev.dayTarget, weekTarget: user.customTargets?.weekly || prev.weekTarget, eolTarget: user.customTargets?.eol || prev.eolTarget })); }, [user.customTargets]);
 
   const { mtdValue, mtdPercentage, balance, monthName } = useMemo(() => {
@@ -130,11 +131,9 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
   };
 
   const handleDeleteEntry = async (date: string) => {
-    if (window.confirm('Are you sure?')) {
       await deleteDailyReport(date);
       setSelectedDateReport(null);
       onDataChange();
-    }
   };
 
   const handleRemoveItem = async (report: DailyReport, index: number) => {
@@ -168,7 +167,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
 
   const cancelEdit = () => { setEditingItemIndex(null); setEditItemState(null); };
   const handleRemoveImage = async (report: DailyReport, imgIndex: number) => {
-      if(!confirm("Delete this image?")) return;
+      
       const images = report.billImages || (report.billImage ? [report.billImage] : []);
       const updatedImages = images.filter((_, i) => i !== imgIndex);
       const updatedReport = { ...report, billImages: updatedImages, billImage: undefined };
@@ -181,13 +180,13 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
     // Fix: Pass sales as 3rd parameter
     const text = generateTextReport(user, report, sales);
     navigator.clipboard.writeText(text);
-    alert('Report copied!');
+    console.log('Report copied!');
   };
 
   const handleCopyToday = () => {
       const todayStr = new Date().toISOString().split('T')[0];
       const todayReport = sales.find(s => s.date === todayStr);
-      if(todayReport) copyReport(todayReport); else alert('No entry found for today.');
+      if(todayReport) copyReport(todayReport); else console.log('No entry found for today.');
   };
 
   const downloadImage = (base64: string, date: string, index: number) => {
@@ -204,6 +203,15 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
       setSelectedDateReport({ ...reportWithImages, billImages: images });
   };
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const { todayItemsSold, todayRevenue, todayCrmAdded } = useMemo(() => {
+      const todaySales = sales.filter(s => s.date === todayStr);
+      const revenue = todaySales.reduce((sum, s) => sum + s.totalValue, 0);
+      const items = todaySales.reduce((sum, s) => sum + s.totalQty, 0);
+      const crmAdded = complaints.filter(c => c.date.startsWith(todayStr)).length;
+      return { todayItemsSold: items, todayRevenue: revenue, todayCrmAdded: crmAdded };
+  }, [sales, complaints, todayStr]);
+
   return (
     <div className="space-y-6">
       <GlassCard className="p-4 bg-gradient-to-r from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-800 animate-in slide-in-from-top-4 duration-500 border-l-4 border-l-yellow-400 shadow-lg rounded-3xl">
@@ -212,6 +220,24 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
              <div><p className="text-sm font-semibold italic text-zinc-700 dark:text-zinc-200">"{quote}"</p><p className="text-[10px] text-zinc-400 mt-1 font-bold uppercase tracking-wider">AI Daily Inspiration</p></div>
          </div>
       </GlassCard>
+
+      <div className="grid grid-cols-3 gap-2 mb-4">
+          <GlassCard className="p-3 flex flex-col items-center justify-center text-center bg-indigo-50/50 dark:bg-indigo-900/10 animate-in zoom-in duration-500 delay-100 border-indigo-100/50 dark:border-indigo-500/20 rounded-3xl">
+            <Package size={20} className="text-indigo-500 mb-1" />
+            <p className="text-[10px] uppercase text-zinc-500 font-bold">Items Sold Today</p>
+            <p className="text-sm font-bold truncate w-full">{todayItemsSold}</p>
+          </GlassCard>
+          <GlassCard className="p-3 flex flex-col items-center justify-center text-center bg-emerald-50/50 dark:bg-emerald-900/10 animate-in zoom-in duration-500 delay-200 border-emerald-100/50 dark:border-emerald-500/20 rounded-3xl">
+            <Wallet size={20} className="text-emerald-500 mb-1" />
+            <p className="text-[10px] uppercase text-zinc-500 font-bold">Revenue Today</p>
+            <p className="text-sm font-bold truncate w-full">₹{todayRevenue.toLocaleString()}</p>
+          </GlassCard>
+          <GlassCard className="p-3 flex flex-col items-center justify-center text-center bg-violet-50/50 dark:bg-violet-900/10 animate-in zoom-in duration-500 delay-300 border-violet-100/50 dark:border-violet-500/20 rounded-3xl">
+            <ClipboardList size={20} className="text-violet-500 mb-1" />
+            <p className="text-[10px] uppercase text-zinc-500 font-bold">CRM Added Today</p>
+            <p className="text-sm font-bold truncate w-full">{todayCrmAdded}</p>
+          </GlassCard>
+      </div>
 
       <div className="grid grid-cols-3 gap-2">
           <GlassCard className="p-3 flex flex-col items-center justify-center text-center bg-blue-50/50 dark:bg-blue-900/10 animate-in zoom-in duration-500 delay-100 border-blue-100/50 dark:border-blue-500/20 rounded-3xl"><Target size={20} className="text-blue-500 mb-1" /><p className="text-[10px] uppercase text-zinc-500 font-bold">Target</p><p className="text-sm font-bold truncate w-full"><CountUp end={user.monthlyTarget / 1000} prefix="₹" suffix="k" /></p></GlassCard>
@@ -285,6 +311,12 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
                         </div>
                     )})}
                 </div>
+                {selectedDateReport.notes && (
+                    <div className="mt-4 p-3 bg-zinc-50/50 dark:bg-zinc-800/20 border border-zinc-200/50 dark:border-zinc-700/50 rounded-3xl">
+                        <h4 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 mb-1 flex items-center gap-2"><Quote size={14} className="text-zinc-500" /> Notes</h4>
+                        <p className="text-sm text-zinc-600 dark:text-zinc-400 whitespace-pre-wrap">{selectedDateReport.notes}</p>
+                    </div>
+                )}
                 {getReportImages(selectedDateReport).length > 0 && (
                     <div className="mt-4"><h4 className="text-sm font-semibold text-zinc-500 mb-2 sticky top-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl py-2 z-10">Bill Copies ({getReportImages(selectedDateReport).length})</h4><div className="grid grid-cols-2 gap-3">
                             {getReportImages(selectedDateReport).map((img, idx) => (

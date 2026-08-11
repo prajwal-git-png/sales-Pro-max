@@ -61,10 +61,13 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
       }
   };
 
+  const [saveMessage, setSaveMessage] = useState('');
+
   const handleSaveAll = () => {
     saveUser(editForm);
     onUpdateUser(editForm);
-    alert("Settings saved successfully! ✅");
+    setSaveMessage("Settings saved successfully! ✅");
+    setTimeout(() => setSaveMessage(''), 3000);
   };
 
   const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -76,7 +79,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
               saveUser(updated);
               onUpdateUser(updated);
           } catch (err) {
-              alert('Image too large. Please select a smaller photo.');
+              console.log('Image too large. Please select a smaller photo.');
           }
       }
   };
@@ -88,7 +91,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
         setIsBackingUp(true);
         await exportFullBackup();
     } catch (e: any) {
-        alert("Backup failed. " + (e.message || String(e)));
+        console.log("Backup failed. " + (e.message || String(e)));
     } finally {
         setIsBackingUp(false);
     }
@@ -103,7 +106,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
       try {
           const content = event.target?.result as string;
           const parsed = JSON.parse(content) as BackupPackage;
-          if (parsed.app !== 'SalesTrack') { alert("Invalid backup file."); return; }
+          if (parsed.app !== 'SalesTrack') { console.log("Invalid backup file."); return; }
           setRestoreSummary({ 
               salesCount: parsed.data.sales?.length || 0, 
               crmCount: parsed.data.crm?.length || 0, 
@@ -113,7 +116,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
           });
           setPendingBackupData(content);
           setShowRestoreModal(true);
-      } catch (err: any) { alert("Error reading file: " + err.message); }
+      } catch (err: any) { console.log("Error reading file: " + err.message); }
       e.target.value = '';
     };
     reader.readAsText(file);
@@ -129,11 +132,11 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
         if (result.success) { 
             window.location.reload(); 
         } else { 
-            alert(result.message); 
+            console.log(result.message); 
             setShowRestoreModal(false); 
         }
     } catch (err: any) {
-        alert("Restore failed: " + (err.message || String(err)));
+        console.log("Restore failed: " + (err.message || String(err)));
     } finally {
         setIsRestoring(false);
     }
@@ -153,7 +156,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
           salesToPrint = await getSalesWithoutImages();
       }
       
-      if (salesToPrint.length === 0) { alert("No records for this period."); return; }
+      if (salesToPrint.length === 0) { console.log("No records for this period."); return; }
       salesToPrint.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       const printWindow = window.open('', '_blank');
       if (printWindow) {
@@ -168,8 +171,14 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
 
   const handleExcelExport = async () => {
     if (!backupMonth) {
-      alert("Please select a month to export.");
+      setSaveMessage("Please select a month to export!");
+      setTimeout(() => setSaveMessage(''), 3000);
       return;
+    }
+    if (!user.storeNameAndLocation || !user.storeCode || !user.tlName) {
+       setSaveMessage("Please fill missing report details above!");
+       setTimeout(() => setSaveMessage(''), 3000);
+       return;
     }
     const { getSalesWithoutImages } = await import('../services/storageService');
     const sales = await getSalesWithoutImages();
@@ -236,6 +245,18 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
                 <GlassInput value={editForm.storeName} onChange={e => setEditForm({...editForm, storeName: e.target.value})} className="rounded-3xl" />
             </div>
             <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase">Store Name & Location (Report)</label>
+                <GlassInput placeholder="Store Name, Location" value={editForm.storeNameAndLocation || ''} onChange={e => setEditForm({...editForm, storeNameAndLocation: e.target.value})} className="rounded-3xl" />
+            </div>
+            <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase">Store Code (Report)</label>
+                <GlassInput placeholder="Enter Store Code" value={editForm.storeCode || ''} onChange={e => setEditForm({...editForm, storeCode: e.target.value})} className="rounded-3xl" />
+            </div>
+            <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase">Bajaj TL Name (Report)</label>
+                <GlassInput placeholder="Enter TL Name" value={editForm.tlName || ''} onChange={e => setEditForm({...editForm, tlName: e.target.value})} className="rounded-3xl" />
+            </div>
+            <div className="space-y-1">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase">Employee ID</label>
                 <GlassInput value={editForm.employeeId} onChange={e => setEditForm({...editForm, employeeId: e.target.value})} className="rounded-3xl" />
             </div>
@@ -294,7 +315,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
         {/* Save Button */}
         <div className="px-2">
             <GlassButton onClick={handleSaveAll} className="w-full py-4 text-lg shadow-xl shadow-blue-500/20 rounded-3xl flex items-center justify-center gap-2">
-                <Save size={20} /> Save All Settings
+                <Save size={20} /> {saveMessage || "Save All Settings"}
             </GlassButton>
         </div>
 

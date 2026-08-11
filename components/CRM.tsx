@@ -46,7 +46,7 @@ const CRM: React.FC<CRMProps> = ({ user }) => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (formData.phoneNumber.length !== 10) {
-        alert("Phone number must be exactly 10 digits.");
+        console.log("Phone number must be exactly 10 digits.");
         return;
     }
     const newId = Date.now().toString();

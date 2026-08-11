@@ -48,6 +48,9 @@ export interface UserProfile {
   phoneNumber: string;
   email?: string;
   storeName: string;
+  storeNameAndLocation?: string;
+  storeCode?: string;
+  tlName?: string;
   monthlyTarget: number;
   avatar?: string; // Base64
   apiKey?: string; // User provided API Key
