@@ -84,10 +84,6 @@ export const generateTextReport = (user: UserProfile, report: DailyReport, allSa
   text += `Bajaj cooler=${fmt(bajajCoolerQty)}\n`;
   
   text += `MTD Sale Value = ${mtdValue.toLocaleString()}`;
-  
-  if (report.notes) {
-    text += `\n\nNotes:\n${report.notes}`;
-  }
   return text;
 };
 
