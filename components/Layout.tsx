@@ -5,6 +5,7 @@ import { Tab, UserProfile, DailyReport } from '../types';
 import { sendCoachMessage, getOfflineResponse, ChatMessage } from '../services/aiService';
 import { Modal } from './ui/GlassComponents';
 import Attendance from './Attendance';
+import { InstallBanner } from './InstallPWA';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -98,6 +99,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
       <div className="fixed bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-purple-400/20 dark:bg-purple-900/10 rounded-full blur-[100px] pointer-events-none" />
 
       {/* Dynamic Island Header */}
+      <InstallBanner />
       <div className="fixed top-4 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none">
         {/* Backdrop for closing when expanded */}
         {isIslandExpanded && (

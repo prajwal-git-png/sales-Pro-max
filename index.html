@@ -6,7 +6,12 @@
     <meta name="theme-color" content="#000000" />
     <title>SalesTrack</title>
     <link rel="manifest" href="/manifest.json" />
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><rect width=%22100%22 height=%22100%22 rx=%2224%22 fill=%22black%22/><path d=%22M35 65 L50 35 L65 65%22 fill=%22none%22 stroke=%22white%22 stroke-width=%228%22 stroke-linecap=%22round%22 stroke-linejoin=%22round%22/></svg>">
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SalesTrack" />
+    <link rel="apple-touch-icon" href="/icon-192.png" />
+    <link rel="icon" type="image/png" href="/icon-192.png" />
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,5 +20,18 @@
   <body class="bg-zinc-100 dark:bg-zinc-950 min-h-screen transition-colors duration-500 text-zinc-800 dark:text-zinc-100">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(reg => {
+              console.log('SalesTrack Service Worker registered with scope:', reg.scope);
+            })
+            .catch(err => {
+              console.log('Service Worker registration warning:', err);
+            });
+        });
+      }
+    </script>
   </body>
 </html>

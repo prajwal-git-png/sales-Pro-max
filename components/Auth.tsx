@@ -1,444 +1,321 @@
 import React, { useState, useEffect } from 'react';
+import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile } from '../types';
+import { saveUser, ensureUserProfileFromGoogle } from '../services/storageService';
 import { loginWithGooglePopup, loginWithGoogleRedirect, checkRedirectResult, auth } from '../services/firebase';
-import { ensureUserProfileFromGoogle, saveUser } from '../services/storageService';
-import { ShieldCheck, Sparkles, AlertCircle, RefreshCw, ArrowRight, UserCheck, ExternalLink, Building2, User, Phone, CheckCircle2 } from 'lucide-react';
 import { onAuthStateChanged } from 'firebase/auth';
+import { AlertCircle, RefreshCw, Smartphone, Download } from 'lucide-react';
+import { usePWAInstall } from './InstallPWA';
 
 interface AuthProps {
   onLogin: (user: UserProfile) => void;
 }
 
 export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
-  const [loading, setLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [isUnauthorizedDomain, setIsUnauthorizedDomain] = useState(false);
-  const [showDirectRedirect, setShowDirectRedirect] = useState(false);
-  const [showCustomLogin, setShowCustomLogin] = useState(false);
+  const [formData, setFormData] = useState({
+    name: '',
+    employeeId: '',
+    phoneNumber: '',
+    storeName: '',
+  });
 
-  // Quick Sign In form states
-  const [execName, setExecName] = useState('');
-  const [storeName, setStoreName] = useState('RELIANCE DIGITAL');
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [monthlyTarget, setMonthlyTarget] = useState(100000);
+  const [errors, setErrors] = useState({
+    name: '',
+    employeeId: '',
+    phoneNumber: '',
+    storeName: '',
+  });
 
-  const currentDomain = typeof window !== 'undefined' ? window.location.hostname : '';
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [authNotice, setAuthNotice] = useState('');
+  const [googleUser, setGoogleUser] = useState<any>(null);
+
+  const { isInstallable, isInstalled, triggerInstall } = usePWAInstall();
+  const [showIOSModal, setShowIOSModal] = useState(false);
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
 
-    // Check if returning from redirect sign-in
+    // Check if returning from a redirect
     checkRedirectResult()
       .then(async (result) => {
-        if (result && result.user && isMounted) {
-          setLoading(true);
-          setStatusMessage('Setting up your workspace profile...');
+        if (result && result.user && mounted) {
+          setGoogleLoading(true);
           const profile = await ensureUserProfileFromGoogle(result.user);
-          if (isMounted) onLogin(profile);
+          if (mounted) onLogin(profile);
         }
       })
       .catch((err) => {
-        console.warn("Redirect result notice:", err?.message || err);
-        if (err?.code === 'auth/unauthorized-domain') {
-          setIsUnauthorizedDomain(true);
-        }
+        console.warn('Redirect sign-in notice:', err);
       });
 
-    // Listen to Firebase Auth state
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser && isMounted) {
-        setLoading(true);
-        setStatusMessage('Syncing with Google account...');
-        const profile = await ensureUserProfileFromGoogle(firebaseUser);
-        if (isMounted) {
-          onLogin(profile);
-          setLoading(false);
+    // Check auth state listener
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user && mounted) {
+        setGoogleUser(user);
+        try {
+          const profile = await ensureUserProfileFromGoogle(user);
+          if (mounted && profile) {
+            onLogin(profile);
+          }
+        } catch (e) {
+          console.warn('Auth state profile sync:', e);
         }
       }
     });
 
     return () => {
-      isMounted = false;
+      mounted = false;
       unsubscribe();
     };
   }, [onLogin]);
 
+  const validate = () => {
+    let isValid = true;
+    const newErrors = { name: '', employeeId: '', phoneNumber: '', storeName: '' };
+
+    // Name Validation: Letters and spaces only, min 2 chars
+    if (!formData.name.trim() || formData.name.trim().length < 2) {
+      newErrors.name = 'Please enter your full name.';
+      isValid = false;
+    }
+
+    // Employee ID Validation: Alphanumeric only
+    if (!formData.employeeId.trim() || !/^[a-zA-Z0-9-]+$/.test(formData.employeeId.trim())) {
+      newErrors.employeeId = 'Valid Employee ID required (e.g. EMP001).';
+      isValid = false;
+    }
+
+    // Phone Validation: 10 digits
+    if (!formData.phoneNumber.trim() || !/^\d{10}$/.test(formData.phoneNumber.replace(/[\s-]/g, ''))) {
+      newErrors.phoneNumber = 'Enter a valid 10-digit mobile number.';
+      isValid = false;
+    }
+
+    // Store Name Validation: Non-empty
+    if (!formData.storeName.trim() || formData.storeName.trim().length < 2) {
+      newErrors.storeName = 'Store name is required (e.g. Reliance Digital).';
+      isValid = false;
+    }
+
+    setErrors(newErrors);
+    return isValid;
+  };
+
   const handleGoogleSignIn = async () => {
-    setErrorMessage('');
-    setIsUnauthorizedDomain(false);
-    setLoading(true);
-    setStatusMessage('Opening Google Sign-In...');
+    setAuthNotice('');
+    setGoogleLoading(true);
 
     try {
       const result = await loginWithGooglePopup();
       if (result && result.user) {
-        setStatusMessage('Securing workspace session...');
+        setGoogleUser(result.user);
         const profile = await ensureUserProfileFromGoogle(result.user);
         onLogin(profile);
       }
     } catch (err: any) {
+      console.warn('Google sign-in exception:', err);
       const code = err?.code || '';
 
-      // User closed or cancelled the popup
-      if (
-        code === 'auth/popup-closed-by-user' ||
-        code === 'auth/cancelled-popup-request' ||
-        code === 'auth/user-cancelled'
-      ) {
-        setLoading(false);
-        setStatusMessage('');
-        setShowDirectRedirect(true);
-        return;
-      }
-
-      // Unauthorized domain on hosting platforms like Vercel
       if (code === 'auth/unauthorized-domain') {
-        setIsUnauthorizedDomain(true);
-        setErrorMessage(`The domain "${currentDomain || 'sales-pro-max.vercel.app'}" needs to be authorized in Firebase Console.`);
-        setShowCustomLogin(true);
-        setLoading(false);
-        return;
-      }
-
-      // Popup blocked by browser or iframe policy
-      if (
-        code === 'auth/popup-blocked' ||
-        code === 'auth/operation-not-supported-in-this-environment'
-      ) {
-        setStatusMessage('Redirecting to Google secure login...');
+        const domain = typeof window !== 'undefined' ? window.location.hostname : 'custom domain';
+        setAuthNotice(`Notice: "${domain}" needs to be authorized in Firebase Console. You can enter details below to sign in directly.`);
+      } else if (code === 'auth/popup-closed-by-user' || code === 'auth/user-cancelled') {
+        setAuthNotice('Google sign-in was cancelled. You can retry or fill details below.');
+      } else if (code === 'auth/popup-blocked') {
         try {
           await loginWithGoogleRedirect();
           return;
-        } catch (redirectErr: any) {
-          if (redirectErr?.code === 'auth/unauthorized-domain') {
-            setIsUnauthorizedDomain(true);
-            setErrorMessage(`The domain "${currentDomain}" needs to be authorized in Firebase Console.`);
-            setShowCustomLogin(true);
-          } else {
-            setErrorMessage('Popup was blocked by your browser. Please try the Full-Page Redirect below.');
-            setShowDirectRedirect(true);
-          }
-          setLoading(false);
+        } catch {
+          setAuthNotice('Popup was blocked by your browser. Please enter details below.');
         }
-      } else if (code === 'auth/network-request-failed') {
-        setErrorMessage('Network connection interrupted. Please verify your internet connection.');
-        setLoading(false);
       } else {
-        setErrorMessage(err?.message || 'Google Sign-in was not completed. Please retry.');
-        setShowDirectRedirect(true);
-        setLoading(false);
+        setAuthNotice('Google sign-in temporary notice. You can enter details below.');
       }
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
-  const handleForceRedirect = async () => {
-    setErrorMessage('');
-    setIsUnauthorizedDomain(false);
-    setLoading(true);
-    setStatusMessage('Redirecting to Google login page...');
-    try {
-      await loginWithGoogleRedirect();
-    } catch (err: any) {
-      if (err?.code === 'auth/unauthorized-domain') {
-        setIsUnauthorizedDomain(true);
-        setErrorMessage(`The domain "${currentDomain}" needs to be authorized in Firebase Console.`);
-        setShowCustomLogin(true);
-      } else {
-        setErrorMessage(err?.message || 'Redirect failed. Please check internet connection.');
-      }
-      setLoading(false);
-    }
-  };
-
-  const handleExecutiveQuickLogin = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanName = execName.trim() || 'SALES EXECUTIVE';
-    setLoading(true);
-    setStatusMessage('Creating your executive profile...');
 
-    const customId = `exec_${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString().slice(-4)}`;
-    const newProfile: UserProfile = {
+    if (!validate()) return;
+
+    const rawPhone = formData.phoneNumber.replace(/[\s-]/g, '');
+    const cleanName = formData.name.trim().toUpperCase();
+    const customId = googleUser?.uid || `exec_${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString().slice(-4)}`;
+
+    const user: UserProfile = {
       uid: customId,
       userId: customId,
-      name: cleanName.toUpperCase(),
-      employeeId: `EMP-${Math.floor(1000 + Math.random() * 9000)}`,
-      phoneNumber: phoneNumber || '+91 98765 43210',
-      email: `${cleanName.toLowerCase().replace(/\s+/g, '.')}@salestrack.app`,
-      storeName: storeName.trim() || 'RELIANCE DIGITAL',
-      monthlyTarget: Number(monthlyTarget) || 100000,
+      name: cleanName,
+      employeeId: formData.employeeId.trim().toUpperCase(),
+      phoneNumber: rawPhone,
+      storeName: formData.storeName.trim().toUpperCase(),
+      email: googleUser?.email || `${cleanName.toLowerCase().replace(/\s+/g, '.')}@salestrack.app`,
+      monthlyTarget: 100000,
     };
 
-    await saveUser(newProfile);
-    onLogin(newProfile);
-  };
-
-  const handleDemoSignIn = async () => {
-    setLoading(true);
-    setStatusMessage('Initializing executive workspace...');
-    const demoProfile: UserProfile = {
-      uid: 'demo_user_field_exec',
-      userId: 'demo_user_field_exec',
-      name: 'FIELD EXECUTIVE (DEMO)',
-      employeeId: 'EMP-7788',
-      phoneNumber: '+91 98765 43210',
-      email: 'executive.demo@salestrack.app',
-      storeName: 'RELIANCE DIGITAL - FLAGSHIP',
-      monthlyTarget: 150000,
-    };
-    await saveUser(demoProfile);
-    onLogin(demoProfile);
+    await saveUser(user);
+    onLogin(user);
   };
 
   return (
-    <div id="auth_container" className="min-h-screen bg-slate-950 flex flex-col justify-center items-center px-4 py-8 relative overflow-hidden">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-gradient-to-br from-zinc-100 via-zinc-200 to-zinc-100 dark:bg-zinc-950 dark:bg-none transition-colors duration-500">
       {/* Background ambient lighting */}
-      <div className="absolute top-1/4 -left-20 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-1/4 -right-20 w-96 h-96 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-500/15 dark:bg-blue-900/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="fixed bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-purple-500/15 dark:bg-purple-900/10 rounded-full blur-[100px] pointer-events-none" />
 
-      <div className="w-full max-w-md relative z-10">
-        {/* Brand Card */}
-        <div id="auth_card" className="bg-slate-900/90 border border-slate-800 backdrop-blur-xl rounded-3xl p-8 shadow-2xl text-center">
-          {/* Logo Badge */}
-          <div className="mx-auto w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-500 p-0.5 shadow-lg shadow-blue-500/20 mb-6 flex items-center justify-center">
-            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-              <ShieldCheck className="w-8 h-8 text-blue-400" />
-            </div>
+      {/* Install App Quick Pill */}
+      {!isInstalled && isInstallable && (
+        <button
+          onClick={() => triggerInstall(() => setShowIOSModal(true))}
+          className="mb-4 px-4 py-2 rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200 dark:border-white/10 text-xs font-bold text-zinc-800 dark:text-zinc-200 shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2 z-10"
+        >
+          <Smartphone size={14} className="text-blue-500" />
+          <span>Install SalesTrack App</span>
+          <Download size={12} className="text-zinc-400" />
+        </button>
+      )}
+
+      <GlassCard className="w-full max-w-md p-8 animate-in zoom-in-95 duration-500 rounded-3xl relative z-10 border border-white/60 dark:border-white/10 shadow-2xl">
+        <div className="text-center mb-6">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center shadow-lg mb-3">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="w-7 h-7">
+              <path d="M35 65 L50 35 L65 65" fill="none" stroke="currentColor" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
           </div>
-
-          <h1 className="text-2xl font-bold text-white tracking-tight">SALESTRACK PRO</h1>
-          <p className="text-slate-400 text-sm mt-1.5 font-medium">Enterprise Field Sales &amp; Target Intelligence</p>
-
-          <div className="my-6 h-px bg-gradient-to-r from-transparent via-slate-800 to-transparent" />
-
-          {/* Unauthorized Domain Guide Callout */}
-          {isUnauthorizedDomain && (
-            <div id="unauthorized_domain_guide" className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-left">
-              <div className="flex items-start gap-2.5">
-                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider">Authorize Vercel Domain</h4>
-                  <p className="text-xs text-amber-200/90 mt-1 leading-relaxed">
-                    To enable Google OAuth on <code className="bg-amber-950/60 px-1 py-0.5 rounded text-amber-300 font-mono text-[11px]">{currentDomain || 'sales-pro-max.vercel.app'}</code>:
-                  </p>
-                  <ol className="text-xs text-amber-200/80 mt-2 space-y-1 list-decimal list-inside">
-                    <li>Go to <strong>Firebase Console &gt; Authentication &gt; Settings</strong></li>
-                    <li>Click <strong>Authorized Domains &gt; Add Domain</strong></li>
-                    <li>Paste <code className="text-amber-300 font-mono font-bold">{currentDomain || 'sales-pro-max.vercel.app'}</code> and save</li>
-                  </ol>
-                  <div className="mt-3 pt-2 border-t border-amber-500/20 flex items-center justify-between">
-                    <span className="text-[11px] text-amber-300/80">In the meantime, you can sign in below:</span>
-                    <a
-                      href="https://console.firebase.google.com/project/gen-lang-client-0662492374/authentication/settings"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs font-semibold text-amber-400 hover:text-amber-300 underline inline-flex items-center gap-1"
-                    >
-                      Open Firebase Console <ExternalLink className="w-3 h-3" />
-                    </a>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {errorMessage && !isUnauthorizedDomain && (
-            <div id="auth_error_alert" className="mb-6 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-left flex items-start gap-3">
-              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="text-xs font-semibold text-rose-300">Sign-in Notice</p>
-                <p className="text-xs text-rose-200/80 mt-0.5 leading-relaxed">{errorMessage}</p>
-                <button
-                  onClick={handleForceRedirect}
-                  className="mt-2 text-xs font-semibold text-rose-400 hover:text-rose-300 underline inline-flex items-center gap-1"
-                >
-                  <RefreshCw className="w-3 h-3" /> Retry via full-page redirect
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* If custom login form is toggled or domain unauthorized */}
-          {showCustomLogin ? (
-            <form onSubmit={handleExecutiveQuickLogin} className="space-y-4 text-left">
-              <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl mb-4">
-                <p className="text-xs text-blue-200 font-medium text-center">
-                  Instant Executive Sign In (Synced to Cloud &amp; Local)
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-blue-400" /> Executive Full Name
-                </label>
-                <input
-                  id="exec_name_input"
-                  type="text"
-                  required
-                  value={execName}
-                  onChange={(e) => setExecName(e.target.value)}
-                  placeholder="e.g. Rahul Sharma"
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
-                  <Building2 className="w-3.5 h-3.5 text-blue-400" /> Store / Branch Name
-                </label>
-                <input
-                  id="exec_store_input"
-                  type="text"
-                  required
-                  value={storeName}
-                  onChange={(e) => setStoreName(e.target.value)}
-                  placeholder="e.g. Reliance Digital - Flagship"
-                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white text-sm focus:outline-none focus:border-blue-500 transition-colors"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5 flex items-center gap-1.5">
-                    <Phone className="w-3.5 h-3.5 text-blue-400" /> Phone (Optional)
-                  </label>
-                  <input
-                    id="exec_phone_input"
-                    type="tel"
-                    value={phoneNumber}
-                    onChange={(e) => setPhoneNumber(e.target.value)}
-                    placeholder="9876543210"
-                    className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-300 mb-1.5">
-                    Monthly Target (₹)
-                  </label>
-                  <input
-                    id="exec_target_input"
-                    type="number"
-                    value={monthlyTarget}
-                    onChange={(e) => setMonthlyTarget(Number(e.target.value))}
-                    className="w-full px-3 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <button
-                id="submit_quick_login_button"
-                type="submit"
-                disabled={loading}
-                className="w-full mt-2 py-3.5 px-6 rounded-xl font-semibold text-sm bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white shadow-lg shadow-blue-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>Sign In &amp; Launch Sales Workspace</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowCustomLogin(false)}
-                className="w-full text-center text-xs text-slate-400 hover:text-slate-200 mt-2"
-              >
-                Back to Google Login
-              </button>
-            </form>
-          ) : (
-            /* Primary Login Options */
-            <div className="space-y-3">
-              <button
-                id="google_signin_button"
-                type="button"
-                disabled={loading}
-                onClick={handleGoogleSignIn}
-                className={`w-full py-4 px-6 rounded-2xl font-semibold text-sm transition-all duration-200 flex items-center justify-center gap-3.5 shadow-lg ${
-                  loading
-                    ? 'bg-slate-800 text-slate-400 cursor-not-allowed border border-slate-700'
-                    : 'bg-white hover:bg-slate-100 text-slate-900 shadow-white/10 active:scale-[0.98]'
-                }`}
-              >
-                {loading ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin text-blue-500" />
-                    <span>{statusMessage || 'Signing in with Google...'}</span>
-                  </>
-                ) : (
-                  <>
-                    {/* Google G Logo */}
-                    <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24">
-                      <path
-                        fill="#4285F4"
-                        d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z"
-                      />
-                      <path
-                        fill="#34A853"
-                        d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z"
-                      />
-                      <path
-                        fill="#FBBC05"
-                        d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.17 0 9.97 0 12s.45 3.83 1.25 5.42l4.03-3.15z"
-                      />
-                      <path
-                        fill="#EA4335"
-                        d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"
-                      />
-                    </svg>
-                    <span>Continue with Google</span>
-                  </>
-                )}
-              </button>
-
-              {/* Direct Redirect fallback option */}
-              {showDirectRedirect && (
-                <button
-                  id="google_redirect_button"
-                  type="button"
-                  disabled={loading}
-                  onClick={handleForceRedirect}
-                  className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700/80 border border-slate-700 text-slate-200 text-xs font-medium flex items-center justify-center gap-2 transition-colors"
-                >
-                  <span>Use Full-Page Redirect Sign In</span>
-                  <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
-                </button>
-              )}
-
-              {/* Instant Executive Profile Login */}
-              <button
-                id="toggle_custom_login_button"
-                type="button"
-                disabled={loading}
-                onClick={() => setShowCustomLogin(true)}
-                className="w-full py-3 px-4 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 text-blue-300 hover:text-blue-200 text-xs font-semibold flex items-center justify-center gap-2 transition-colors"
-              >
-                <Building2 className="w-3.5 h-3.5 text-blue-400" />
-                <span>Executive / Store Direct Sign In</span>
-              </button>
-
-              {/* Quick Demo Workspace Access */}
-              <button
-                id="demo_signin_button"
-                type="button"
-                disabled={loading}
-                onClick={handleDemoSignIn}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800/80 text-slate-400 hover:text-slate-200 text-xs font-medium flex items-center justify-center gap-2 transition-colors"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Explore with Demo Executive Profile</span>
-              </button>
-            </div>
-          )}
-
-          <div className="mt-6 pt-5 border-t border-slate-800/80 flex items-center justify-center gap-2 text-xs text-slate-500">
-            <Sparkles className="w-3.5 h-3.5 text-blue-400" />
-            <span>Secure Cloud Firestore Synchronized</span>
-          </div>
+          <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-300">
+            SalesTrack
+          </h1>
+          <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Welcome back, Executive.</p>
         </div>
 
-        {/* Security footer notice */}
-        <p className="text-center text-xs text-slate-500 mt-6">
-          Protected by Google Firebase Authentication &amp; Firestore Encrypted Security Rules
-        </p>
-      </div>
+        {/* Google Sign-in Option */}
+        <div className="space-y-3 mb-6">
+          <button
+            type="button"
+            disabled={googleLoading}
+            onClick={handleGoogleSignIn}
+            className="w-full py-3.5 px-5 rounded-2xl font-semibold text-sm bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-800 dark:text-white border border-zinc-200 dark:border-zinc-700/80 shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+          >
+            {googleLoading ? (
+              <>
+                <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
+                <span>Signing in with Google...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z" />
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.17 0 9.97 0 12s.45 3.83 1.25 5.42l4.03-3.15z" />
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
+                </svg>
+                <span>Continue with Google</span>
+              </>
+            )}
+          </button>
+
+          {authNotice && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-left flex items-start gap-2">
+              <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5" />
+              <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-tight">{authNotice}</p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 mb-5">
+          <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-800" />
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">or enter details</span>
+          <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-800" />
+        </div>
+
+        {/* Executive Profile Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-300 mb-1">Full Name</label>
+            <GlassInput
+              placeholder="e.g. Rahul Sharma"
+              value={formData.name}
+              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+              className={`rounded-2xl py-3 px-4 text-sm ${errors.name ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+            />
+            {errors.name && (
+              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle size={12} /> {errors.name}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-300 mb-1">Employee ID</label>
+            <GlassInput
+              placeholder="e.g. EMP123"
+              value={formData.employeeId}
+              onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
+              className={`rounded-2xl py-3 px-4 text-sm ${errors.employeeId ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+            />
+            {errors.employeeId && (
+              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle size={12} /> {errors.employeeId}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-300 mb-1">Phone Number</label>
+            <GlassInput
+              type="tel"
+              maxLength={10}
+              placeholder="9876543210"
+              value={formData.phoneNumber}
+              onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+              className={`rounded-2xl py-3 px-4 text-sm ${errors.phoneNumber ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+            />
+            {errors.phoneNumber && (
+              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle size={12} /> {errors.phoneNumber}
+              </p>
+            )}
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-zinc-600 dark:text-zinc-300 mb-1">Store Name</label>
+            <GlassInput
+              placeholder="e.g. Reliance Digital, JPNagara"
+              value={formData.storeName}
+              onChange={(e) => setFormData({ ...formData, storeName: e.target.value })}
+              className={`rounded-2xl py-3 px-4 text-sm ${errors.storeName ? 'border-red-500 ring-1 ring-red-500' : ''}`}
+            />
+            {errors.storeName && (
+              <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                <AlertCircle size={12} /> {errors.storeName}
+              </p>
+            )}
+          </div>
+
+          <GlassButton type="submit" className="w-full mt-6 rounded-2xl py-3.5">
+            Get Started
+          </GlassButton>
+        </form>
+      </GlassCard>
+
+      {/* iOS Installation Instruction Modal */}
+      <Modal isOpen={showIOSModal} onClose={() => setShowIOSModal(false)} title="Install on iPhone / iPad">
+        <div className="space-y-4 text-xs text-zinc-700 dark:text-zinc-300">
+          <p>Install SalesTrack for offline access and full-screen experience:</p>
+          <ol className="space-y-2 list-decimal list-inside bg-zinc-100 dark:bg-zinc-800/60 p-3 rounded-2xl">
+            <li>Tap the <strong>Share</strong> button at the bottom of Safari.</li>
+            <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
+            <li>Tap <strong>Add</strong> in the top-right corner.</li>
+          </ol>
+          <GlassButton onClick={() => setShowIOSModal(false)} className="w-full rounded-2xl py-3">
+            Understood
+          </GlassButton>
+        </div>
+      </Modal>
     </div>
   );
 };

@@ -2,7 +2,8 @@
   "name": "Copy of SalesTrack - Daily Reporting",
   "description": "A glassmorphism-styled PWA for sales executives to track daily sales, manage CRM, and generate cumulative reports.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "geolocation"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"

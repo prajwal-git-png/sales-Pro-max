@@ -1,10 +1,11 @@
 import { useState, useRef } from 'react';
-import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon, FileSpreadsheet } from 'lucide-react';
+import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon, FileSpreadsheet, Smartphone, Share2, PlusSquare, Sparkles } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile, StoreLocation } from '../types';
-import { saveUser, compressImage, exportFullBackup, importFullBackup, BackupPackage } from '../services/storageService';
+import { saveUser, compressImage, exportFullBackup, importFullBackup } from '../services/storageService';
 import { ReportAdjuster } from './ReportAdjuster';
+import { usePWAInstall } from './InstallPWA';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -15,7 +16,6 @@ const DefaultIcon = L.icon({
     iconSize: [25, 41],
     iconAnchor: [12, 41]
 });
-
 L.Marker.prototype.options.icon = DefaultIcon;
 
 interface SettingsProps {
@@ -32,6 +32,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showLocationModal, setShowLocationModal] = useState(false);
   const [tempLocation, setTempLocation] = useState<StoreLocation | undefined>(user.storeLocation);
+  
   const [showRestoreModal, setShowRestoreModal] = useState(false);
   const [restoreSummary, setRestoreSummary] = useState<{
       salesCount: number;
@@ -41,6 +42,17 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
       date: string;
   } | null>(null);
   const [pendingBackupData, setPendingBackupData] = useState<string | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false);
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [statusNotification, setStatusNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  
+  const { isInstalled, triggerInstall, isIOS } = usePWAInstall();
+  const [showPwaGuideModal, setShowPwaGuideModal] = useState(false);
+
+  const showStatus = (text: string, type: 'success' | 'error' = 'success') => {
+    setStatusNotification({ text, type });
+    setTimeout(() => setStatusNotification(null), 5000);
+  };
 
   const LocationMarker = () => {
     useMapEvents({
@@ -58,11 +70,11 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
           saveUser(updated);
           onUpdateUser(updated);
           setShowLocationModal(false);
+          showStatus("Store location registered successfully! 📍");
       }
   };
 
   const [saveMessage, setSaveMessage] = useState('');
-
   const handleSaveAll = () => {
     saveUser(editForm);
     onUpdateUser(editForm);
@@ -78,20 +90,19 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
               setEditForm(updated);
               saveUser(updated);
               onUpdateUser(updated);
-          } catch (err) {
-              console.log('Image too large. Please select a smaller photo.');
+          } catch {
+              showStatus('Image too large. Please select a smaller photo.', 'error');
           }
       }
   };
-
-  const [isBackingUp, setIsBackingUp] = useState(false);
 
   const triggerFullBackup = async () => {
     try {
         setIsBackingUp(true);
         await exportFullBackup();
+        showStatus("Backup JSON exported and downloaded successfully! 💾");
     } catch (e: any) {
-        console.log("Backup failed. " + (e.message || String(e)));
+        showStatus("Backup failed: " + (e?.message || String(e)), 'error');
     } finally {
         setIsBackingUp(false);
     }
@@ -100,29 +111,40 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
           const content = event.target?.result as string;
-          const parsed = JSON.parse(content) as BackupPackage;
-          if (parsed.app !== 'SalesTrack') { console.log("Invalid backup file."); return; }
+          if (!content || !content.trim()) {
+            showStatus("Uploaded file is empty.", 'error');
+            return;
+          }
+          const parsed = JSON.parse(content);
+          
+          // Support new BackupPackage, old direct JSON, or array exports
+          const payload = parsed.data || (Array.isArray(parsed) ? { sales: parsed } : parsed);
+          const salesList = payload.sales || payload.reports || payload.entries || (Array.isArray(parsed) ? parsed : []);
+          const crmList = payload.crm || payload.complaints || [];
+          const eodList = payload.eod || payload.eodEntries || [];
+          const profile = payload.user || payload.userProfile || parsed.user || user;
+          const timestamp = parsed.timestamp || parsed.date || new Date().toISOString();
+
           setRestoreSummary({ 
-              salesCount: parsed.data.sales?.length || 0, 
-              crmCount: parsed.data.crm?.length || 0, 
-              eodCount: parsed.data.eod?.length || 0, 
-              userName: parsed.data.user?.name || 'Unknown', 
-              date: new Date(parsed.timestamp).toLocaleString() 
+              salesCount: Array.isArray(salesList) ? salesList.length : 0, 
+              crmCount: Array.isArray(crmList) ? crmList.length : 0, 
+              eodCount: Array.isArray(eodList) ? eodList.length : 0, 
+              userName: profile?.name || user.name || 'Sales Executive', 
+              date: new Date(timestamp).toLocaleString() 
           });
           setPendingBackupData(content);
           setShowRestoreModal(true);
-      } catch (err: any) { console.log("Error reading file: " + err.message); }
+      } catch (err: any) { 
+          showStatus("Error reading JSON backup: " + (err?.message || String(err)), 'error'); 
+      }
       e.target.value = '';
     };
     reader.readAsText(file);
   };
-
-  const [isRestoring, setIsRestoring] = useState(false);
 
   const confirmRestore = async () => {
     if (!pendingBackupData) return;
@@ -130,13 +152,16 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
     try {
         const result = await importFullBackup(pendingBackupData);
         if (result.success) { 
-            window.location.reload(); 
+            showStatus(result.message);
+            setTimeout(() => {
+                window.location.reload();
+            }, 1000);
         } else { 
-            console.log(result.message); 
+            showStatus("Restore failed: " + result.message, 'error'); 
             setShowRestoreModal(false); 
         }
     } catch (err: any) {
-        console.log("Restore failed: " + (err.message || String(err)));
+        showStatus("Restore failed: " + (err?.message || String(err)), 'error');
     } finally {
         setIsRestoring(false);
     }
@@ -145,23 +170,40 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
   const handlePrintView = async () => {
       const { getSalesWithoutImages, getSalesByMonth, getImagesForDate } = await import('../services/storageService');
       let salesToPrint = [];
-      if (backupMonth) { 
-          const sales = await getSalesByMonth(backupMonth); 
-          // Fetch images for these sales
-          salesToPrint = await Promise.all(sales.map(async (s) => {
-              const images = await getImagesForDate(s.date);
-              return { ...s, billImages: images };
-          }));
+      if (backupMonth) {
+          salesToPrint = await getSalesByMonth(backupMonth);
       } else {
           salesToPrint = await getSalesWithoutImages();
       }
-      
-      if (salesToPrint.length === 0) { console.log("No records for this period."); return; }
-      salesToPrint.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      if (salesToPrint.length === 0) {
+          showStatus("No data found for the selected period", 'error');
+          return;
+      }
+
+      const allImages: { date: string, images: string[] }[] = [];
+      for (const s of salesToPrint) {
+          const imgs = await getImagesForDate(s.date);
+          if (imgs.length > 0) {
+              allImages.push({ date: s.date, images: imgs });
+          }
+      }
+
       const printWindow = window.open('', '_blank');
       if (printWindow) {
-        const imagesHtml = salesToPrint.filter(s => (s.billImages || (s.billImage ? [s.billImage] : [])).length > 0).map(s => `<div class="bill-group" style="margin-bottom: 25px; border: 1px solid #eee; padding: 15px; border-radius: 8px; page-break-inside: avoid;"><div style="font-weight: bold; border-bottom: 1px solid #f0f0f0; margin-bottom: 10px; padding-bottom: 5px;">Date: ${s.date.split('-').reverse().join('/')}</div><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">${(s.billImages || (s.billImage ? [s.billImage] : [])).map(img => `<img src="${img}" style="width: 100%; height: auto; border: 1px solid #ddd; border-radius: 4px;" />`).join('')}</div></div>`).join('');
-        printWindow.document.write(`<html><head><title>Report - ${user.name}</title><style>body { font-family: sans-serif; color: #333; padding: 30px; } h1 { color: #000; } .meta { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; } table { width: 100%; border-collapse: collapse; margin-bottom: 30px; } th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 12px; } th { background: #f4f4f4; } .bills-title { font-weight: bold; margin: 40px 0 20px; border-left: 5px solid #000; padding-left: 10px; }</style></head><body><h1>Sales Report</h1><div class="meta"><div><strong>${user.name}</strong> • ${user.storeName}</div><div>Period: ${backupMonth || 'Full History (Images omitted for full history)'}</div></div><table><thead><tr><th>Date</th><th>Product Details</th><th>Qty</th><th>Value</th></tr></thead><tbody>${salesToPrint.map(s => `<tr><td>${s.date.split('-').reverse().join('/')}</td><td>${s.isWeekOff ? 'WEEK OFF' : s.items.map(i => `${i.productName} (${i.quantity})`).join('<br>')}</td><td>${s.totalQty}</td><td>₹${s.totalValue.toLocaleString()}</td></tr>`).join('')}</tbody></table>${imagesHtml ? `<div class="bills-title">Attached Bills</div>${imagesHtml}` : ''}<script>window.onload = () => setTimeout(() => window.print(), 800)</script></body></html>`);
+        let imagesHtml = '';
+        if (allImages.length > 0) {
+            imagesHtml = allImages.map(d => `
+                <div style="margin-top: 20px;">
+                    <div style="font-weight: bold; margin-bottom: 8px;">Date: ${d.date.split('-').reverse().join('/')}</div>
+                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px;">
+                        ${d.images.map(img => `<img src="${img}" style="width: 100%; height: 250px; object-fit: contain; border: 1px solid #ccc; border-radius: 8px;" />`).join('')}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        printWindow.document.write(`<html><head><title>Report - ${user.name}</title><style>body { font-family: sans-serif; color: #333; padding: 30px; } h1 { color: #000; } .meta { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; } table { width: 100%; border-collapse: collapse; margin-bottom: 30px; } th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 12px; } th { background: #f4f4f4; } .bills-title { font-weight: bold; margin: 40px 0 20px; border-left: 5px solid #000; padding-left: 10px; }</style></head><body><h1>Sales Report</h1><div class="meta"><div><strong>${user.name}</strong> • ${user.storeName}</div><div>Period: ${backupMonth || 'Full History'}</div></div><table><thead><tr><th>Date</th><th>Product Details</th><th>Qty</th><th>Value</th></tr></thead><tbody>${salesToPrint.map(s => `<tr><td>${s.date.split('-').reverse().join('/')}</td><td>${s.isWeekOff ? 'WEEK OFF' : s.items.map(i => `${i.productName} (${i.quantity})`).join('<br>')}</td><td>${s.totalQty}</td><td>₹${s.totalValue.toLocaleString()}</td></tr>`).join('')}</tbody></table>${imagesHtml ? `<div class="bills-title">Attached Bills</div>${imagesHtml}` : ''}<script>window.onload = () => setTimeout(() => window.print(), 800)</script></body></html>`);
         printWindow.document.close();
       }
   };
@@ -170,122 +212,95 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
   const [reportSales, setReportSales] = useState<any[]>([]);
 
   const handleExcelExport = async () => {
-    if (!backupMonth) {
-      setSaveMessage("Please select a month to export!");
-      setTimeout(() => setSaveMessage(''), 3000);
-      return;
-    }
-    if (!user.storeNameAndLocation || !user.storeCode || !user.tlName) {
-       setSaveMessage("Please fill missing report details above!");
-       setTimeout(() => setSaveMessage(''), 3000);
-       return;
-    }
-    const { getSalesWithoutImages } = await import('../services/storageService');
-    const sales = await getSalesWithoutImages();
-    setReportSales(sales);
-    setShowReportAdjuster(true);
+      if (!backupMonth) {
+          showStatus("Please select a month first", 'error');
+          return;
+      }
+      const { getSalesByMonth } = await import('../services/storageService');
+      const sales = await getSalesByMonth(backupMonth);
+      setReportSales(sales);
+      setShowReportAdjuster(true);
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-24">
-        {/* Profile Header */}
-        <GlassCard className="p-6 text-center relative rounded-3xl">
-            <div className="relative inline-block mb-4">
-                <div className="w-24 h-24 rounded-3xl overflow-hidden mx-auto border-4 border-white/50 dark:border-white/20 shadow-sm">
-                    {editForm.avatar ? (
-                        <img src={editForm.avatar} className="w-full h-full object-cover" />
-                    ) : (
-                        <div className="w-full h-full bg-zinc-200/50 dark:bg-zinc-800/50 backdrop-blur-md flex items-center justify-center text-3xl font-bold text-zinc-500 dark:text-zinc-400">
-                            {user.name.charAt(0)}
-                        </div>
-                    )}
+    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+        {/* Status Notification Banner */}
+        {statusNotification && (
+          <div className={`p-4 rounded-3xl backdrop-blur-md border text-sm font-semibold flex items-center gap-3 transition-all animate-in fade-in slide-in-from-top-2 ${
+            statusNotification.type === 'error'
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400'
+              : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400'
+          }`}>
+            {statusNotification.type === 'error' ? <AlertTriangle size={18} className="shrink-0" /> : <CheckCircle2 size={18} className="shrink-0" />}
+            <span className="flex-1">{statusNotification.text}</span>
+          </div>
+        )}
+
+        {/* Executive Profile Card */}
+        <GlassCard className="p-6 relative rounded-3xl">
+            <div className="flex items-center gap-4 mb-6">
+                <div className="relative">
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white dark:border-zinc-700 shadow-md bg-zinc-100 dark:bg-zinc-800 flex items-center justify-center">
+                        {editForm.avatar ? (
+                            <img src={editForm.avatar} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                            <User size={32} className="text-zinc-400" />
+                        )}
+                    </div>
+                    <label className="absolute -bottom-1 -right-1 p-1.5 bg-blue-600 text-white rounded-full cursor-pointer shadow-md hover:bg-blue-700 transition-colors">
+                        <User size={12} />
+                        <input type="file" accept="image/*" onChange={handleAvatarChange} className="hidden" />
+                    </label>
                 </div>
-                <label className="absolute bottom-0 right-0 bg-blue-600/90 backdrop-blur-md text-white p-2 rounded-3xl cursor-pointer shadow-sm hover:scale-110 transition-transform">
-                    <User size={14} />
-                    <input type="file" className="hidden" accept="image/*" onChange={handleAvatarChange} />
-                </label>
+                <div>
+                    <h2 className="text-xl font-black text-zinc-900 dark:text-white">{editForm.name || "Executive Profile"}</h2>
+                    <p className="text-xs text-zinc-500 font-medium">{editForm.storeName || "Store Location"}</p>
+                </div>
             </div>
-            <div className="space-y-1">
-                <h2 className="text-xl font-bold">{user.name}</h2>
-                <p className="text-sm text-zinc-500">{user.storeName}</p>
-            </div>
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-[10px] text-green-600 dark:text-green-400 font-bold uppercase tracking-wider bg-green-50/50 dark:bg-green-900/30 backdrop-blur-md px-3 py-1 rounded-3xl border border-green-100/50 dark:border-green-800/50">
-                <CheckCircle2 size={10} /> AI Sales Coach Online
+
+            <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase">Executive Name</label>
+                        <GlassInput value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="rounded-3xl" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase">Employee ID</label>
+                        <GlassInput value={editForm.employeeId} onChange={e => setEditForm({...editForm, employeeId: e.target.value})} className="rounded-3xl" />
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase">Phone Number</label>
+                        <GlassInput value={editForm.phoneNumber} onChange={e => setEditForm({...editForm, phoneNumber: e.target.value})} className="rounded-3xl" />
+                    </div>
+                    <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-zinc-400 uppercase">Store Name</label>
+                        <GlassInput value={editForm.storeName} onChange={e => setEditForm({...editForm, storeName: e.target.value})} className="rounded-3xl" />
+                    </div>
+                </div>
             </div>
         </GlassCard>
 
-        {/* Appearance Settings */}
-        <h3 className="font-bold text-lg px-2 flex items-center gap-2"><Sun size={18} className="text-yellow-500" /> Appearance</h3>
-        <GlassCard className="p-5 flex items-center justify-between rounded-3xl">
-            <div className="flex items-center gap-3">
-                <div className={`p-2 rounded-full ${isDark ? 'bg-zinc-800' : 'bg-yellow-100'}`}>
-                    {isDark ? <Moon size={18} className="text-white" /> : <Sun size={18} className="text-yellow-600" />}
-                </div>
-                <span className="text-sm font-bold text-zinc-800 dark:text-white">Dark Mode</span>
-            </div>
-            <button 
-                onClick={toggleTheme}
-                className={`w-14 h-8 rounded-full p-1 transition-colors duration-300 relative ${isDark ? 'bg-zinc-700' : 'bg-zinc-200'}`}
-            >
-                <div className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow-sm transform transition-transform duration-300 flex items-center justify-center ${isDark ? 'translate-x-6' : 'translate-x-0'}`}>
-                    {isDark ? <Moon size={12} className="text-zinc-800" /> : <Sun size={12} className="text-yellow-500" />}
-                </div>
-            </button>
-        </GlassCard>
-
-        {/* Profile & Store Settings */}
-        <h3 className="font-bold text-lg px-2 flex items-center gap-2"><User size={18} className="text-blue-500" /> Account Settings</h3>
+        {/* Store Geo-Location */}
+        <h3 className="font-bold text-lg px-2 flex items-center gap-2"><MapPin size={18} className="text-emerald-500" /> Store Geo-Location</h3>
         <GlassCard className="p-5 space-y-4 rounded-3xl">
-            <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase">Executive Name</label>
-                <GlassInput value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} className="rounded-3xl" />
-            </div>
-            <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase">Store Name</label>
-                <GlassInput value={editForm.storeName} onChange={e => setEditForm({...editForm, storeName: e.target.value})} className="rounded-3xl" />
-            </div>
-            <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase">Store Name & Location (Report)</label>
-                <GlassInput placeholder="Store Name, Location" value={editForm.storeNameAndLocation || ''} onChange={e => setEditForm({...editForm, storeNameAndLocation: e.target.value})} className="rounded-3xl" />
-            </div>
-            <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase">Store Code (Report)</label>
-                <GlassInput placeholder="Enter Store Code" value={editForm.storeCode || ''} onChange={e => setEditForm({...editForm, storeCode: e.target.value})} className="rounded-3xl" />
-            </div>
-            <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase">Bajaj TL Name (Report)</label>
-                <GlassInput placeholder="Enter TL Name" value={editForm.tlName || ''} onChange={e => setEditForm({...editForm, tlName: e.target.value})} className="rounded-3xl" />
-            </div>
-            <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase">Employee ID</label>
-                <GlassInput value={editForm.employeeId} onChange={e => setEditForm({...editForm, employeeId: e.target.value})} className="rounded-3xl" />
-            </div>
-            <div className="space-y-1">
-                <label className="text-[10px] font-bold text-zinc-400 uppercase">Gemini API Key</label>
-                <GlassInput type="password" placeholder="Enter your Gemini API Key" value={editForm.apiKey || ''} onChange={e => setEditForm({...editForm, apiKey: e.target.value})} className="rounded-3xl" />
-            </div>
-        </GlassCard>
-
-        {/* Store Location Settings */}
-        <h3 className="font-bold text-lg px-2 flex items-center gap-2"><MapPin size={18} className="text-red-500" /> Store Location</h3>
-        <GlassCard className="p-5 space-y-4 rounded-3xl">
-            <p className="text-xs text-zinc-500 italic">Register your store location to enable attendance check-ins.</p>
-            <div className="flex items-center gap-3">
-                <div className="flex-1 bg-zinc-100 dark:bg-zinc-800 p-3 rounded-3xl border border-zinc-200 dark:border-zinc-700">
-                    <p className="text-[10px] font-bold text-zinc-400 uppercase mb-1">Current Coordinates</p>
-                    <p className="text-sm font-mono font-bold">
-                        {editForm.storeLocation ? `${editForm.storeLocation.lat.toFixed(6)}, ${editForm.storeLocation.lng.toFixed(6)}` : 'Not Registered'}
-                    </p>
+            <div className="flex items-center justify-between">
+                <div>
+                    <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">Registered Store Coordinates</div>
+                    <div className="text-[10px] text-zinc-500">
+                        {editForm.storeLocation ? `${editForm.storeLocation.lat.toFixed(4)}, ${editForm.storeLocation.lng.toFixed(4)}` : "Location not registered yet."}
+                    </div>
                 </div>
-                <GlassButton onClick={() => setShowLocationModal(true)} variant="secondary" className="rounded-3xl h-full flex flex-col items-center gap-1 px-4">
-                    <MapIcon size={20} />
-                    <span className="text-[10px] font-bold uppercase">Update</span>
+                <GlassButton onClick={() => setShowLocationModal(true)} className="text-xs px-3 py-1.5 rounded-3xl flex items-center gap-1">
+                    <MapIcon size={14} /> {editForm.storeLocation ? "Update Pin" : "Set Pin"}
                 </GlassButton>
             </div>
         </GlassCard>
 
-        {/* CRM Settings */}
-        <h3 className="font-bold text-lg px-2 flex items-center gap-2"><Globe size={18} className="text-emerald-500" /> CRM Configuration</h3>
+        {/* Quick Links & Brand URLs */}
+        <h3 className="font-bold text-lg px-2 flex items-center gap-2"><Globe size={18} className="text-blue-500" /> Brand Portal & Support</h3>
         <GlassCard className="p-5 space-y-4 rounded-3xl">
             <div className="space-y-1">
                 <label className="text-[10px] font-bold text-zinc-400 uppercase">Brand Website URL</label>
@@ -346,27 +361,70 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
             </div>
         </GlassCard>
 
-        <GlassButton variant="danger" onClick={onLogout} className="w-full rounded-3xl py-4">Logout Account</GlassButton>
+        {/* App Installation & PWA Section */}
+        <h3 className="font-bold text-lg px-2 flex items-center gap-2"><Smartphone size={18} className="text-blue-500" /> Application &amp; Device</h3>
+        <GlassCard className="p-5 space-y-4 rounded-3xl">
+            <div className="flex items-center justify-between">
+                <div>
+                    <div className="text-xs font-bold text-zinc-800 dark:text-zinc-200">
+                      {isInstalled ? "SalesTrack App Installed" : "Install Standalone App"}
+                    </div>
+                    <div className="text-[10px] text-zinc-500">
+                      {isInstalled ? "Running as standalone progressive web app" : "Add to home screen for 1-tap launch & offline reporting"}
+                    </div>
+                </div>
+                {isInstalled ? (
+                  <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-bold">
+                    <CheckCircle2 size={14} /> Installed
+                  </div>
+                ) : (
+                  <GlassButton
+                    onClick={() => triggerInstall(() => setShowPwaGuideModal(true))}
+                    className="text-xs px-4 py-2 rounded-2xl flex items-center gap-1.5 !bg-blue-600 !border-blue-500 text-white"
+                  >
+                    <Download size={14} /> Install App
+                  </GlassButton>
+                )}
+            </div>
+        </GlassCard>
+
+        {/* Theme and Logout Controls */}
+        <div className="flex gap-3">
+            <GlassButton onClick={toggleTheme} variant="secondary" className="flex-1 rounded-3xl py-4 flex items-center justify-center gap-2">
+                {isDark ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} className="text-indigo-600" />}
+                <span>{isDark ? "Light Mode" : "Dark Mode"}</span>
+            </GlassButton>
+            <GlassButton variant="danger" onClick={onLogout} className="flex-1 rounded-3xl py-4">
+                Logout Account
+            </GlassButton>
+        </div>
 
         {/* Modals */}
         <Modal isOpen={showRestoreModal} onClose={() => setShowRestoreModal(false)} title="Confirm Import">
             <div className="space-y-6">
                 <div className="p-4 bg-amber-50/80 dark:bg-amber-900/30 backdrop-blur-md rounded-3xl border border-amber-200/50 dark:border-amber-800/50 flex gap-4">
                     <AlertTriangle size={32} className="text-amber-600 dark:text-amber-500 shrink-0" />
-                    <div className="text-xs text-amber-800 dark:text-amber-200">Warning: This will overwrite all your current reports and profile data.</div>
+                    <div className="text-xs text-amber-800 dark:text-amber-200">
+                        Warning: This will import reports, attendance, and profile data from the backup file into your account.
+                    </div>
                 </div>
+
                 {restoreSummary && (
                     <div className="bg-white/60 dark:bg-zinc-800/60 backdrop-blur-md p-4 rounded-3xl border border-white/50 dark:border-white/20 space-y-2">
                         <p className="text-[10px] font-bold text-zinc-400 uppercase">Backup File Info</p>
                         <p className="text-sm font-bold text-zinc-800 dark:text-white">Executive: {restoreSummary.userName}</p>
-                        <p className="text-[11px] text-zinc-500">Date: {restoreSummary.date}</p>
+                        <p className="text-xs text-zinc-600 dark:text-zinc-300">Sales Records: {restoreSummary.salesCount} | EOD Entries: {restoreSummary.eodCount} | CRM: {restoreSummary.crmCount}</p>
+                        <p className="text-[11px] text-zinc-500">Backup Date: {restoreSummary.date}</p>
                     </div>
                 )}
+
                 <div className="flex gap-3">
                     <GlassButton disabled={isRestoring} onClick={confirmRestore} className="flex-1 !bg-amber-600/90 !border-amber-500 rounded-3xl text-white disabled:opacity-50">
-                        {isRestoring ? "Restoring..." : "Confirm"}
+                        {isRestoring ? "Restoring..." : "Confirm & Restore"}
                     </GlassButton>
-                    <GlassButton disabled={isRestoring} onClick={() => setShowRestoreModal(false)} variant="secondary" className="flex-1 rounded-3xl disabled:opacity-50">Cancel</GlassButton>
+                    <GlassButton disabled={isRestoring} onClick={() => setShowRestoreModal(false)} variant="secondary" className="flex-1 rounded-3xl disabled:opacity-50">
+                        Cancel
+                    </GlassButton>
                 </div>
             </div>
         </Modal>
@@ -380,6 +438,56 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
                 <div className="absolute bottom-2 left-2 bg-white/90 p-2 rounded-lg text-[10px] font-bold uppercase z-[400] shadow-md">Tap on map to set location</div>
             </div>
             <GlassButton onClick={handleSaveLocation} className="w-full rounded-3xl py-3">Register Location</GlassButton>
+        </Modal>
+
+        {/* PWA Install Guide Modal */}
+        <Modal isOpen={showPwaGuideModal} onClose={() => setShowPwaGuideModal(false)} title="Install SalesTrack App">
+            <div className="space-y-4 text-zinc-800 dark:text-zinc-200">
+                <div className="flex items-center gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
+                    <Sparkles className="w-5 h-5 text-blue-500 shrink-0" />
+                    <p className="text-xs font-medium text-blue-900 dark:text-blue-200">
+                        Install SalesTrack to your device home screen for instant access and full offline daily reporting.
+                    </p>
+                </div>
+
+                {isIOS ? (
+                    <div className="space-y-3">
+                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">iOS Safari Steps:</p>
+                        <ol className="space-y-2.5 text-xs">
+                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
+                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">1</span>
+                                <span>Tap the <strong>Share button</strong> <Share2 className="w-3.5 h-3.5 inline mx-1 text-blue-500" /> in Safari.</span>
+                            </li>
+                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
+                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">2</span>
+                                <span>Scroll and select <strong>'Add to Home Screen'</strong> <PlusSquare className="w-3.5 h-3.5 inline mx-1 text-blue-500" />.</span>
+                            </li>
+                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
+                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">3</span>
+                                <span>Tap <strong>'Add'</strong> in the top-right corner.</span>
+                            </li>
+                        </ol>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Chrome / Edge / Android Steps:</p>
+                        <ol className="space-y-2.5 text-xs">
+                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
+                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">1</span>
+                                <span>Click the <strong>Install App icon</strong> in the browser address bar or menu.</span>
+                            </li>
+                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
+                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">2</span>
+                                <span>Tap <strong>'Install'</strong> to create the standalone app on your home screen or desktop.</span>
+                            </li>
+                        </ol>
+                    </div>
+                )}
+
+                <GlassButton onClick={() => setShowPwaGuideModal(false)} className="w-full mt-2 rounded-2xl py-3 text-sm">
+                    Close Guide
+                </GlassButton>
+            </div>
         </Modal>
 
         {showReportAdjuster && backupMonth && (

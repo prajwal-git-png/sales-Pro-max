@@ -19,7 +19,7 @@ export const getUser = (): UserProfile | null => {
 };
 
 const getUid = () => {
-  return auth.currentUser?.uid || getUser()?.uid || '';
+  return auth.currentUser?.uid || getUser()?.uid || 'default_user';
 };
 
 const getDocId = (key: string, storeName?: string) => {
@@ -154,13 +154,16 @@ export const deleteFromStore = async (storeName: string, key: string): Promise<v
 
 export const saveUser = async (user: UserProfile) => {
   try {
-    localStorage.setItem(LS_KEYS.USER, JSON.stringify(user));
-    if (user.uid) {
-      const userDocRef = doc(db, 'users', user.uid);
+    const activeUid = getUid() || user.uid || 'default_user';
+    const profileToSave = { ...user, uid: user.uid || activeUid, userId: user.userId || activeUid };
+    localStorage.setItem(LS_KEYS.USER, JSON.stringify(profileToSave));
+
+    if (auth.currentUser?.uid) {
+      const userDocRef = doc(db, 'users', auth.currentUser.uid);
       await setDoc(userDocRef, { 
-        ...user, 
-        userId: user.uid,
-        email: auth.currentUser?.email || user.email || '' 
+        ...profileToSave, 
+        userId: auth.currentUser.uid,
+        email: auth.currentUser.email || user.email || '' 
       }, { merge: true });
     }
   } catch (e) {
@@ -185,8 +188,10 @@ export const ensureUserProfileFromGoogle = async (firebaseUser: User): Promise<U
 
   // 2. Try from local storage
   const existingLocal = getUser();
-  if (existingLocal && existingLocal.uid === firebaseUser.uid) {
-    return existingLocal;
+  if (existingLocal && (existingLocal.uid === firebaseUser.uid || !existingLocal.uid)) {
+    const updated = { ...existingLocal, uid: firebaseUser.uid, userId: firebaseUser.uid };
+    localStorage.setItem(LS_KEYS.USER, JSON.stringify(updated));
+    return updated;
   }
 
   // 3. Auto-provision profile from Google Account
@@ -258,8 +263,8 @@ export const saveSaleEntry = async (date: string, newItems: SaleItem[], newBillI
   const existingImagesRecord = await getFromStore<{date: string, images: string[]}>('images', date);
 
   const calculateTotals = (items: SaleItem[]) => ({
-    totalQty: items.reduce((acc, item) => acc + item.quantity, 0),
-    totalValue: items.reduce((acc, item) => acc + (item.price * item.quantity), 0),
+    totalQty: items.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0),
+    totalValue: items.reduce((acc, item) => acc + ((Number(item.price) || 0) * (Number(item.quantity) || 0)), 0),
   });
 
   const existingImages = existingImagesRecord?.images || [];
@@ -387,17 +392,250 @@ export const compressImage = (file: File): Promise<string> => {
   });
 };
 
-export const exportFullBackup = async (): Promise<void> => {
-  console.log("Export backed up by Firestore and local storage.");
-};
-
 export interface BackupPackage {
   app: string;
   version: string;
   timestamp: string;
-  data: any;
+  data: {
+    user?: UserProfile;
+    sales?: DailyReport[];
+    images?: { date: string; images: string[] }[];
+    eod?: StoreEODEntry[];
+    crm?: Complaint[];
+    followups?: FollowUp[];
+    attendance?: AttendanceEntry[];
+  };
 }
 
-export const importFullBackup = async (_jsonString: string): Promise<{ success: boolean; message: string }> => {
-  return { success: false, message: 'Restore disabled in cloud mode.' };
+export const exportFullBackup = async (): Promise<void> => {
+  const currentUser = getUser();
+  const sales = await getAllFromStore<DailyReport>('sales');
+  const images = await getAllFromStore<{ date: string; images: string[] }>('images');
+  const eod = await getAllFromStore<StoreEODEntry>('eod');
+  const crm = await getAllFromStore<Complaint>('crm');
+  const followups = await getAllFromStore<FollowUp>('followups');
+  const attendance = await getAllFromStore<AttendanceEntry>('attendance');
+
+  const backupPackage: BackupPackage = {
+    app: 'SalesTrack',
+    version: '2.0.0',
+    timestamp: new Date().toISOString(),
+    data: {
+      user: currentUser || undefined,
+      sales,
+      images,
+      eod,
+      crm,
+      followups,
+      attendance,
+    }
+  };
+
+  const jsonString = JSON.stringify(backupPackage, null, 2);
+  const blob = new Blob([jsonString], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const safeName = currentUser?.name ? currentUser.name.replace(/[^a-zA-Z0-9]/g, '_') : 'Executive';
+  const dateStr = new Date().toISOString().split('T')[0];
+  a.href = url;
+  a.download = `SalesTrack_Backup_${safeName}_${dateStr}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+export const importFullBackup = async (jsonString: string): Promise<{ success: boolean; message: string }> => {
+  try {
+    if (!jsonString || typeof jsonString !== 'string') {
+      return { success: false, message: 'Empty or invalid backup file.' };
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonString);
+    } catch (e: any) {
+      return { success: false, message: 'Invalid JSON format: ' + (e.message || String(e)) };
+    }
+
+    // Extract payload from various formats (wrapper object or direct object or array)
+    let payloadData: any = {};
+    if (parsed && typeof parsed === 'object') {
+      if (parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data)) {
+        payloadData = parsed.data;
+      } else if (Array.isArray(parsed)) {
+        payloadData = { sales: parsed };
+      } else {
+        payloadData = parsed;
+      }
+    }
+
+    const currentUid = getUid();
+
+    // 1. Restore User Profile
+    const userToRestore: UserProfile | undefined = payloadData.user || payloadData.userProfile || parsed.user;
+    if (userToRestore && typeof userToRestore === 'object') {
+      const activeUser = getUser();
+      const updatedUser: UserProfile = {
+        ...userToRestore,
+        uid: activeUser?.uid || userToRestore.uid || currentUid,
+        userId: activeUser?.userId || userToRestore.userId || currentUid,
+        name: userToRestore.name || activeUser?.name || 'Sales Executive',
+        storeName: userToRestore.storeName || activeUser?.storeName || 'RELIANCE DIGITAL',
+        monthlyTarget: Number(userToRestore.monthlyTarget) || activeUser?.monthlyTarget || 100000,
+        employeeId: userToRestore.employeeId || activeUser?.employeeId || 'EMP-1001',
+        phoneNumber: userToRestore.phoneNumber || activeUser?.phoneNumber || '',
+      };
+      await saveUser(updatedUser);
+    }
+
+    // 2. Restore Sales Reports
+    const rawSales: any[] = payloadData.sales || payloadData.reports || payloadData.salesData || payloadData.entries || [];
+    let salesRestoredCount = 0;
+    if (Array.isArray(rawSales)) {
+      for (const item of rawSales) {
+        if (!item || !item.date) continue;
+        const dateKey = String(item.date).trim();
+        
+        // Normalize items array
+        const rawItems = item.items || item.saleItems || [];
+        const normalizedItems: SaleItem[] = Array.isArray(rawItems) ? rawItems.map((si: any, idx: number) => ({
+          id: si.id || `item_${dateKey}_${idx}_${Date.now()}`,
+          productName: si.productName || si.product || si.name || 'Sales Item',
+          quantity: Number(si.quantity || si.qty || 1) || 1,
+          price: Number(si.price || si.rate || si.amount || 0) || 0,
+          customerPhone: si.customerPhone || si.phone || '',
+          billId: si.billId || si.invoiceNo || '',
+          txnNumber: si.txnNumber || '',
+        })) : [];
+
+        const totalQty = item.totalQty !== undefined ? Number(item.totalQty) : normalizedItems.reduce((sum, i) => sum + i.quantity, 0);
+        const totalValue = item.totalValue !== undefined ? Number(item.totalValue) : normalizedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+
+        const cleanReport: DailyReport = {
+          date: dateKey,
+          items: normalizedItems,
+          totalQty,
+          totalValue,
+          isWeekOff: Boolean(item.isWeekOff),
+          notes: item.notes || '',
+          userId: currentUid,
+        };
+
+        // Extract any attached images
+        const embeddedImages: string[] = item.billImages || (item.billImage ? [item.billImage] : []);
+        if (embeddedImages.length > 0) {
+          await putToStore('images', dateKey, { date: dateKey, images: embeddedImages });
+        }
+
+        await putToStore('sales', dateKey, cleanReport);
+        salesRestoredCount++;
+      }
+    }
+
+    // 3. Restore Standalone Images
+    const rawImages: any[] = payloadData.images || [];
+    if (Array.isArray(rawImages)) {
+      for (const imgItem of rawImages) {
+        if (imgItem && imgItem.date && Array.isArray(imgItem.images) && imgItem.images.length > 0) {
+          await putToStore('images', imgItem.date, { date: imgItem.date, images: imgItem.images });
+        }
+      }
+    }
+
+    // 4. Restore EOD Entries
+    const rawEod: any[] = payloadData.eod || payloadData.eodEntries || [];
+    let eodCount = 0;
+    if (Array.isArray(rawEod)) {
+      for (const entry of rawEod) {
+        if (!entry || !entry.date) continue;
+        const eodPayload: StoreEODEntry = {
+          date: String(entry.date).trim(),
+          achievement: Number(entry.achievement || entry.dayAchieve || 0) || 0,
+          eolAchieve: Number(entry.eolAchieve || 0) || 0,
+          dayTarget: Number(entry.dayTarget || 0) || 0,
+          weekTarget: Number(entry.weekTarget || 0) || 0,
+          eolTarget: Number(entry.eolTarget || 0) || 0,
+          userId: currentUid,
+        };
+        await putToStore('eod', eodPayload.date, eodPayload);
+        eodCount++;
+      }
+    }
+
+    // 5. Restore CRM Complaints
+    const rawCrm: any[] = payloadData.crm || payloadData.complaints || [];
+    let crmCount = 0;
+    if (Array.isArray(rawCrm)) {
+      for (const comp of rawCrm) {
+        if (!comp) continue;
+        const compId = String(comp.id || `crm_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+        const crmPayload: Complaint = {
+          id: compId,
+          customerName: comp.customerName || comp.name || 'Customer',
+          phoneNumber: comp.phoneNumber || comp.phone || '',
+          productModel: comp.productModel || comp.product || comp.model || 'Model',
+          issueType: comp.issueType || 'Complaint',
+          customProductName: comp.customProductName || '',
+          status: comp.status || (comp.isResolved ? 'Resolved' : 'Raised'),
+          timeline: Array.isArray(comp.timeline) ? comp.timeline : [
+            { status: comp.status || 'Raised', date: comp.date || new Date().toISOString(), note: 'Imported complaint' }
+          ],
+          date: comp.date || new Date().toISOString().split('T')[0],
+          repairsDone: comp.repairsDone || '',
+          partsReplaced: comp.partsReplaced || '',
+          userId: currentUid,
+        };
+        await putToStore('crm', compId, crmPayload);
+        crmCount++;
+      }
+    }
+
+    // 6. Restore Follow-ups
+    const rawFollowups: any[] = payloadData.followups || payloadData.followUps || [];
+    if (Array.isArray(rawFollowups)) {
+      for (const fu of rawFollowups) {
+        if (!fu) continue;
+        const fuId = String(fu.id || `fu_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
+        const fuPayload: FollowUp = {
+          id: fuId,
+          customerName: fu.customerName || 'Customer',
+          phoneNumber: fu.phoneNumber || '',
+          reminderDate: fu.reminderDate || new Date().toISOString().split('T')[0],
+          note: fu.note || '',
+          isCompleted: Boolean(fu.isCompleted),
+          createdAt: fu.createdAt || new Date().toISOString(),
+          userId: currentUid,
+        };
+        await putToStore('followups', fuId, fuPayload);
+      }
+    }
+
+    // 7. Restore Attendance
+    const rawAttendance: any[] = payloadData.attendance || payloadData.attendanceList || [];
+    if (Array.isArray(rawAttendance)) {
+      for (const att of rawAttendance) {
+        if (!att || !att.date) continue;
+        const attPayload: AttendanceEntry = {
+          date: String(att.date).trim(),
+          status: att.status || 'Present',
+          checkInTime: att.checkInTime || '',
+          location: att.location || undefined,
+          userId: currentUid,
+        };
+        await putToStore('attendance', attPayload.date, attPayload);
+      }
+    }
+
+    return {
+      success: true,
+      message: `Successfully imported ${salesRestoredCount} sales reports, ${eodCount} EOD records, and ${crmCount} CRM cases.`,
+    };
+  } catch (err: any) {
+    console.error("importFullBackup failed", err);
+    return {
+      success: false,
+      message: 'Restore failed: ' + (err?.message || String(err)),
+    };
+  }
 };
