@@ -54,17 +54,37 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
   useEffect(() => { getMotivationalQuote(user.apiKey).then(setQuote); getComplaints().then(setComplaints); }, [user.apiKey]);
   useEffect(() => { setEodForm(prev => ({ ...prev, dayTarget: user.customTargets?.daily || prev.dayTarget, weekTarget: user.customTargets?.weekly || prev.weekTarget, eolTarget: user.customTargets?.eol || prev.eolTarget })); }, [user.customTargets]);
 
-  const { mtdValue, mtdPercentage, balance, monthName } = useMemo(() => {
+  const { mtdValue, mtdPercentage, balance, monthName, currentMonthSalesCount } = useMemo(() => {
     const now = currentMonth;
-    const currentMonthSales = sales.filter(s => {
-      const d = new Date(s.date);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
-    });
-    const value = currentMonthSales.reduce((sum, s) => sum + s.totalValue, 0);
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const currentMonthPrefix = `${year}-${month}`;
+    const currentMonthSales = sales.filter(s => s.date && s.date.startsWith(currentMonthPrefix));
+    const value = currentMonthSales.reduce((sum, s) => sum + (s.totalValue || 0), 0);
     const percentage = user.monthlyTarget > 0 ? Math.min((value / user.monthlyTarget) * 100, 100) : 0;
     const bal = Math.max(user.monthlyTarget - value, 0);
-    return { mtdValue: value, mtdPercentage: percentage, balance: bal, monthName: now.toLocaleString('default', { month: 'long', year: 'numeric' }) };
+    return { 
+      mtdValue: value, 
+      mtdPercentage: percentage, 
+      balance: bal, 
+      monthName: now.toLocaleString('default', { month: 'long', year: 'numeric' }),
+      currentMonthSalesCount: currentMonthSales.length
+    };
   }, [sales, user.monthlyTarget, currentMonth]);
+
+  const latestSalesDate = useMemo(() => {
+    if (!sales || sales.length === 0) return null;
+    const sorted = [...sales].filter(s => s.date).sort((a, b) => b.date.localeCompare(a.date));
+    return sorted[0]?.date || null;
+  }, [sales]);
+
+  const jumpToLatestMonth = () => {
+    if (!latestSalesDate) return;
+    const [y, m] = latestSalesDate.split('-');
+    if (y && m) {
+      setCurrentMonth(new Date(parseInt(y), parseInt(m) - 1, 1));
+    }
+  };
 
   const calendarDays = useMemo(() => {
     const now = currentMonth;
@@ -86,19 +106,22 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
 
   const filteredSales = useMemo(() => {
       if (viewMode === 'calendar') return sales;
-      return sales.filter(report => {
+      return (sales || []).filter(report => {
+          if (!report) return false;
           if (filters.date && report.date !== filters.date) return false;
           if (filters.productName || filters.minQty || filters.minPrice) {
-             const hasMatchingItem = report.items.some(item => {
-                 const nameMatch = !filters.productName || item.productName.toLowerCase().includes(filters.productName.toLowerCase());
-                 const qtyMatch = !filters.minQty || item.quantity >= parseInt(filters.minQty);
-                 const priceMatch = !filters.minPrice || item.price >= parseFloat(filters.minPrice);
+             const items = Array.isArray(report.items) ? report.items : [];
+             const hasMatchingItem = items.some(item => {
+                 if (!item) return false;
+                 const nameMatch = !filters.productName || (item.productName || '').toLowerCase().includes(filters.productName.toLowerCase());
+                 const qtyMatch = !filters.minQty || (item.quantity || 0) >= parseInt(filters.minQty);
+                 const priceMatch = !filters.minPrice || (item.price || 0) >= parseFloat(filters.minPrice);
                  return nameMatch && qtyMatch && priceMatch;
              });
              if (!hasMatchingItem) return false;
           }
           return true;
-      }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      }).sort((a, b) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime());
   }, [sales, viewMode, filters]);
 
   const getEODStats = () => {
@@ -137,14 +160,14 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
   };
 
   const handleRemoveItem = async (report: DailyReport, index: number) => {
-      const updatedItems = [...report.items];
+      const updatedItems = [...(report.items || [])];
       updatedItems.splice(index, 1);
       if (updatedItems.length === 0) {
           await handleDeleteEntry(report.date);
           return;
       }
-      const totalQty = updatedItems.reduce((acc, item) => acc + item.quantity, 0);
-      const totalValue = updatedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+      const totalQty = updatedItems.reduce((acc, item) => acc + (item.quantity || 0), 0);
+      const totalValue = updatedItems.reduce((acc, item) => acc + ((item.price || 0) * (item.quantity || 0)), 0);
       const updatedReport = { ...report, items: updatedItems, totalQty, totalValue };
       await updateDailyReport(report.date, updatedReport);
       setSelectedDateReport(updatedReport);
@@ -154,10 +177,10 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
   const startEditItem = (item: SaleItem, index: number) => { setEditingItemIndex(index); setEditItemState({ ...item }); };
   const saveEditItem = async (report: DailyReport, index: number) => {
       if (!editItemState) return;
-      const updatedItems = [...report.items];
+      const updatedItems = [...(report.items || [])];
       updatedItems[index] = editItemState;
-      const totalQty = updatedItems.reduce((acc, item) => acc + item.quantity, 0);
-      const totalValue = updatedItems.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+      const totalQty = updatedItems.reduce((acc, item) => acc + (item.quantity || 0), 0);
+      const totalValue = updatedItems.reduce((acc, item) => acc + ((item.price || 0) * (item.quantity || 0)), 0);
       const updatedReport = { ...report, items: updatedItems, totalQty, totalValue };
       await updateDailyReport(report.date, updatedReport);
       setSelectedDateReport(updatedReport);
@@ -256,6 +279,17 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
 
       {viewMode === 'calendar' ? (
         <GlassCard className="p-4 rounded-3xl">
+          {sales.length > 0 && currentMonthSalesCount === 0 && latestSalesDate && (
+            <div className="mb-3 p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-center justify-between text-xs text-blue-800 dark:text-blue-200">
+              <span>{sales.length} total reports available in other months.</span>
+              <button 
+                onClick={jumpToLatestMonth}
+                className="font-bold underline hover:text-blue-600 dark:hover:text-blue-300 ml-2 shrink-0"
+              >
+                Go to Latest Data →
+              </button>
+            </div>
+          )}
           <div className="flex items-center justify-between mb-4 px-2"><button onClick={prevMonth} className="p-2 rounded-3xl hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors"><ChevronLeft size={20} className="text-zinc-600 dark:text-zinc-300" /></button><h3 className="text-lg font-bold text-zinc-800 dark:text-white flex items-center gap-2"><CalendarIcon size={18} className="text-blue-500" />{currentMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</h3><button onClick={nextMonth} className="p-2 rounded-3xl hover:bg-zinc-100 dark:hover:bg-white/10 transition-colors"><ChevronRight size={20} className="text-zinc-600 dark:text-zinc-300" /></button></div>
           <div className="grid grid-cols-7 gap-2 mb-2">{['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => ( <div key={i} className="text-center text-xs font-bold text-zinc-400">{d}</div> ))}</div>
           <div className="grid grid-cols-7 gap-3">
@@ -299,7 +333,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
                 <>
                 <div className="grid grid-cols-2 gap-4"><div className="bg-blue-50/50 dark:bg-blue-900/30 border border-blue-100/50 dark:border-blue-500/20 backdrop-blur-sm p-3 rounded-3xl text-center"><p className="text-xs text-zinc-500">Value</p><p className="font-bold text-blue-600">₹{selectedDateReport.totalValue.toLocaleString()}</p></div><div className="bg-purple-50/50 dark:bg-purple-900/30 border border-purple-100/50 dark:border-purple-500/20 backdrop-blur-sm p-3 rounded-3xl text-center"><p className="text-xs text-zinc-500">Quantity</p><p className="font-bold text-purple-600">{selectedDateReport.totalQty}</p></div></div>
                 <div className="space-y-3"><h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider sticky top-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl py-2 z-10">Items Sold</h4>
-                    {selectedDateReport.items.map((item, idx) => {
+                    {(selectedDateReport.items || []).map((item, idx) => {
                         const isEditing = editingItemIndex === idx;
                         return (
                         <div key={idx} className={`flex justify-between items-center p-3 rounded-3xl border transition-all ${isEditing ? 'bg-blue-50/50 dark:bg-blue-900/20 border-blue-200/50 dark:border-blue-500/20' : 'bg-white/40 dark:bg-white/5 border-white/40 dark:border-white/10 backdrop-blur-sm'}`}>

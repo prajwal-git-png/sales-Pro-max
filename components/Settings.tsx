@@ -24,9 +24,10 @@ interface SettingsProps {
   onLogout: () => void;
   isDark: boolean;
   toggleTheme: () => void;
+  onDataChange?: () => void;
 }
 
-const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDark, toggleTheme }) => {
+const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDark, toggleTheme, onDataChange }) => {
   const [editForm, setEditForm] = useState(user);
   const [backupMonth, setBackupMonth] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -153,9 +154,19 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
         const result = await importFullBackup(pendingBackupData);
         if (result.success) { 
             showStatus(result.message);
+            const { getUser } = await import('../services/storageService');
+            const updated = getUser();
+            if (updated) {
+              setEditForm(updated);
+              onUpdateUser(updated);
+            }
+            if (onDataChange) {
+              onDataChange();
+            }
+            setShowRestoreModal(false);
             setTimeout(() => {
                 window.location.reload();
-            }, 1000);
+            }, 800);
         } else { 
             showStatus("Restore failed: " + result.message, 'error'); 
             setShowRestoreModal(false); 
@@ -203,7 +214,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
             `).join('');
         }
 
-        printWindow.document.write(`<html><head><title>Report - ${user.name}</title><style>body { font-family: sans-serif; color: #333; padding: 30px; } h1 { color: #000; } .meta { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; } table { width: 100%; border-collapse: collapse; margin-bottom: 30px; } th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 12px; } th { background: #f4f4f4; } .bills-title { font-weight: bold; margin: 40px 0 20px; border-left: 5px solid #000; padding-left: 10px; }</style></head><body><h1>Sales Report</h1><div class="meta"><div><strong>${user.name}</strong> • ${user.storeName}</div><div>Period: ${backupMonth || 'Full History'}</div></div><table><thead><tr><th>Date</th><th>Product Details</th><th>Qty</th><th>Value</th></tr></thead><tbody>${salesToPrint.map(s => `<tr><td>${s.date.split('-').reverse().join('/')}</td><td>${s.isWeekOff ? 'WEEK OFF' : s.items.map(i => `${i.productName} (${i.quantity})`).join('<br>')}</td><td>${s.totalQty}</td><td>₹${s.totalValue.toLocaleString()}</td></tr>`).join('')}</tbody></table>${imagesHtml ? `<div class="bills-title">Attached Bills</div>${imagesHtml}` : ''}<script>window.onload = () => setTimeout(() => window.print(), 800)</script></body></html>`);
+        printWindow.document.write(`<html><head><title>Report - ${user.name}</title><style>body { font-family: sans-serif; color: #333; padding: 30px; } h1 { color: #000; } .meta { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 20px; } table { width: 100%; border-collapse: collapse; margin-bottom: 30px; } th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 12px; } th { background: #f4f4f4; } .bills-title { font-weight: bold; margin: 40px 0 20px; border-left: 5px solid #000; padding-left: 10px; }</style></head><body><h1>Sales Report</h1><div class="meta"><div><strong>${user.name}</strong> • ${user.storeName}</div><div>Period: ${backupMonth || 'Full History'}</div></div><table><thead><tr><th>Date</th><th>Product Details</th><th>Qty</th><th>Value</th></tr></thead><tbody>${salesToPrint.map(s => `<tr><td>${(s.date || '').split('-').reverse().join('/')}</td><td>${s.isWeekOff ? 'WEEK OFF' : (s.items || []).map(i => `${i.productName} (${i.quantity})`).join('<br>')}</td><td>${s.totalQty || 0}</td><td>₹${(s.totalValue || 0).toLocaleString()}</td></tr>`).join('')}</tbody></table>${imagesHtml ? `<div class="bills-title">Attached Bills</div>${imagesHtml}` : ''}<script>window.onload = () => setTimeout(() => window.print(), 800)</script></body></html>`);
         printWindow.document.close();
       }
   };

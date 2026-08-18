@@ -19,6 +19,15 @@ const App = () => {
   const [salesData, setSalesData] = useState<DailyReport[]>([]);
   const [isDark, setIsDark] = useState(false);
 
+  const refreshData = async () => {
+    try {
+      const storedSales = await getSalesWithoutImages();
+      setSalesData(storedSales);
+    } catch (e) {
+      console.warn("refreshData error", e);
+    }
+  };
+
   useEffect(() => {
     const initApp = async () => {
       const savedTheme = getTheme();
@@ -35,12 +44,7 @@ const App = () => {
       }
 
       // 2. Load stored sales data
-      try {
-        const storedSales = await getSalesWithoutImages();
-        setSalesData(storedSales);
-      } catch (e) {
-        console.warn("Initial sales load error", e);
-      }
+      await refreshData();
 
       // 3. Listen to Firebase Auth state
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -53,6 +57,8 @@ const App = () => {
           } catch (err) {
             console.warn("Error fetching cloud profile:", err);
           }
+          // Also refresh sales once authenticated user context is active
+          await refreshData();
         }
         setIsLoading(false);
       });
@@ -87,11 +93,6 @@ const App = () => {
   const handleLogout = () => {
     logoutUser();
     setUser(null);
-  };
-
-  const refreshData = async () => {
-    const storedSales = await getSalesWithoutImages();
-    setSalesData(storedSales);
   };
 
   if (isLoading) {
@@ -139,7 +140,7 @@ const App = () => {
       {activeTab === 'eod' && <EOD user={user} onUpdateUser={setUser} />}
       {activeTab === 'crm' && <CRM user={user} />}
       {activeTab === 'performance' && <Performance sales={salesData} />}
-      {activeTab === 'settings' && <Settings user={user} onUpdateUser={setUser} onLogout={handleLogout} isDark={isDark} toggleTheme={toggleTheme} />}
+      {activeTab === 'settings' && <Settings user={user} onUpdateUser={setUser} onLogout={handleLogout} isDark={isDark} toggleTheme={toggleTheme} onDataChange={refreshData} />}
     </Layout>
   );
 };

@@ -30,9 +30,9 @@ export function ReportAdjuster({ user, sales, monthDate, onClose }: Props) {
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
         const daySale = sales.find(s => s.date === dateStr);
         let qty = 0;
-        if (daySale) {
-          const items = daySale.items.filter(item => item.productName === p.description);
-          qty = items.reduce((sum, item) => sum + item.quantity, 0);
+        if (daySale && Array.isArray(daySale.items)) {
+          const items = daySale.items.filter(item => item && item.productName === p.description);
+          qty = items.reduce((sum, item) => sum + (item.quantity || 0), 0);
         }
         initialData[p.description][i] = qty;
       }

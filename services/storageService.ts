@@ -2,6 +2,18 @@ import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry, Attendanc
 import { db, auth, logoutFirebase } from './firebase';
 import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 import { User } from 'firebase/auth';
+import { 
+  idbSaveImages, 
+  idbGetImages, 
+  idbGetAllImages, 
+  idbDeleteImages, 
+  migrateImagesFromLocalStorage 
+} from './indexedDbService';
+
+// Run migration on init to free up any bloated localStorage quota from previous sessions
+if (typeof window !== 'undefined') {
+  migrateImagesFromLocalStorage().catch(console.warn);
+}
 
 const LS_KEYS = {
   USER: 'app_user_profile',
@@ -18,33 +30,82 @@ export const getUser = (): UserProfile | null => {
   }
 };
 
-const getUid = () => {
-  return auth.currentUser?.uid || getUser()?.uid || 'default_user';
+const getUid = (): string => {
+  return auth.currentUser?.uid || getUser()?.uid || getUser()?.userId || 'default_user';
 };
 
 const getDocId = (key: string, storeName?: string) => {
   return storeName === 'users' ? key : `${getUid()}_${key}`;
 };
 
-// Local storage backup helpers
+// Date Normalization Helper to guarantee YYYY-MM-DD
+export const normalizeDateString = (input: any): string => {
+  if (!input) return new Date().toISOString().split('T')[0];
+  const str = String(input).trim();
+  
+  // Strict YYYY-MM-DD
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+  
+  // ISO strings 2024-05-12T...
+  if (/^\d{4}-\d{2}-\d{2}T/.test(str)) {
+    return str.split('T')[0];
+  }
+  
+  // DD-MM-YYYY or DD/MM/YYYY
+  const ddmmyyyy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+  if (ddmmyyyy) {
+    const d = ddmmyyyy[1].padStart(2, '0');
+    const m = ddmmyyyy[2].padStart(2, '0');
+    const y = ddmmyyyy[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  // YYYY/MM/DD
+  const yyyymmdd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+  if (yyyymmdd) {
+    const y = yyyymmdd[1];
+    const m = yyyymmdd[2].padStart(2, '0');
+    const d = yyyymmdd[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  // Fallback to JS Date parse
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    const y = parsed.getFullYear();
+    const m = String(parsed.getMonth() + 1).padStart(2, '0');
+    const d = String(parsed.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  return str;
+};
+
+// Local storage backup keys
 const getLocalKey = (storeName: string, key: string) => `${LS_KEYS.STORE_PREFIX}${storeName}_${getUid()}_${key}`;
 const getLocalCollectionKey = (storeName: string) => `${LS_KEYS.STORE_PREFIX}${storeName}_${getUid()}_all`;
 
 const getLocalItem = <T>(storeName: string, key: string): T | undefined => {
   try {
-    const uid = getUid();
-    if (!uid) return undefined;
-    const item = localStorage.getItem(getLocalKey(storeName, key));
-    return item ? JSON.parse(item) : undefined;
+    const exact = localStorage.getItem(getLocalKey(storeName, key));
+    if (exact) return JSON.parse(exact);
+
+    // Fallback: check collection
+    const all = getLocalAll<T>(storeName);
+    const found = all.find((i: any) => (i?.date || i?.id || i?.uid) === key);
+    return found;
   } catch {
     return undefined;
   }
 };
 
 const setLocalItem = <T>(storeName: string, key: string, data: T): void => {
+  // Never store heavy images in localStorage to avoid hitting browser 5MB quota
+  if (storeName === 'images') return;
+
   try {
-    const uid = getUid();
-    if (!uid) return;
     localStorage.setItem(getLocalKey(storeName, key), JSON.stringify(data));
     const all = getLocalAll<T>(storeName);
     const idKey = (data as any)?.date || (data as any)?.id || key;
@@ -55,15 +116,28 @@ const setLocalItem = <T>(storeName: string, key: string, data: T): void => {
       all.push(data);
     }
     localStorage.setItem(getLocalCollectionKey(storeName), JSON.stringify(all));
-  } catch (e) {
-    console.error("setLocalItem error", e);
+  } catch (e: any) {
+    if (e?.name === 'QuotaExceededError' || e?.code === 22) {
+      console.warn("Storage quota exceeded! Cleaning up legacy caches...");
+      // Purge any accidental bloated image keys from localStorage
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && (k.includes('images_') || k.includes('salestrack_store_images_'))) {
+            localStorage.removeItem(k);
+          }
+        }
+        localStorage.setItem(getLocalKey(storeName, key), JSON.stringify(data));
+      } catch {}
+    } else {
+      console.warn("setLocalItem warning:", e);
+    }
   }
 };
 
 const removeLocalItem = (storeName: string, key: string): void => {
+  if (storeName === 'images') return;
   try {
-    const uid = getUid();
-    if (!uid) return;
     localStorage.removeItem(getLocalKey(storeName, key));
     const all = getLocalAll(storeName);
     const filtered = all.filter((i: any) => (i?.date || i?.id || i?.uid) !== key);
@@ -73,28 +147,124 @@ const removeLocalItem = (storeName: string, key: string): void => {
   }
 };
 
+/**
+ * Universal Local Collector:
+ * Gathers and merges data from the current user's local key AND any legacy/previous
+ * keys in localStorage so imported reports are NEVER lost when UID changes.
+ */
 const getLocalAll = <T>(storeName: string): T[] => {
+  if (storeName === 'images') return [];
   try {
-    const uid = getUid();
-    if (!uid) return [];
-    const item = localStorage.getItem(getLocalCollectionKey(storeName));
-    return item ? JSON.parse(item) : [];
+    const map = new Map<string, T>();
+
+    // 1. Scan primary key for active UID
+    const primaryKey = getLocalCollectionKey(storeName);
+    const primaryRaw = localStorage.getItem(primaryKey);
+    if (primaryRaw) {
+      try {
+        const parsed = JSON.parse(primaryRaw);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((item: any) => {
+            const key = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid || JSON.stringify(item));
+            if (item?.date) item.date = key;
+            map.set(key, item);
+          });
+        }
+      } catch {}
+    }
+
+    // 2. Scan ALL localStorage keys matching this storeName to catch legacy or previous-UID data
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+
+      if (k.startsWith(`${LS_KEYS.STORE_PREFIX}${storeName}_`) && k.endsWith('_all') && k !== primaryKey) {
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((item: any) => {
+                const key = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid || JSON.stringify(item));
+                if (item?.date) item.date = key;
+                if (!map.has(key)) {
+                  map.set(key, item);
+                }
+              });
+            }
+          }
+        } catch {}
+      } else if (k.startsWith(`${LS_KEYS.STORE_PREFIX}${storeName}_`) && !k.endsWith('_all')) {
+        // Individual doc keys
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) {
+            const item = JSON.parse(raw);
+            const key = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid);
+            if (key) {
+              if (item?.date) item.date = key;
+              if (!map.has(key)) {
+                map.set(key, item);
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    const mergedList = Array.from(map.values());
+
+    // Keep primary key up to date if we recovered missing items
+    if (mergedList.length > 0) {
+      try {
+        localStorage.setItem(primaryKey, JSON.stringify(mergedList));
+      } catch {}
+    }
+
+    return mergedList;
   } catch {
     return [];
   }
 };
 
 export const getFromStore = async <T>(storeName: string, key: string): Promise<T | undefined> => {
-  const localVal = getLocalItem<T>(storeName, key);
+  const normKey = storeName === 'sales' || storeName === 'images' || storeName === 'attendance' || storeName === 'eod' ? normalizeDateString(key) : key;
+  const docId = getDocId(normKey, storeName);
+
+  if (storeName === 'images') {
+    // 1. Check IndexedDB first
+    const idbRecord = await idbGetImages(docId, normKey);
+    let localVal: T | undefined = idbRecord ? ({ date: idbRecord.date, images: idbRecord.images, userId: idbRecord.userId } as T) : undefined;
+    
+    // 2. Check Cloud
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      try {
+        const docRef = doc(db, storeName, docId);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const cloudData = docSnap.data() as T;
+          const images = (cloudData as any)?.images || [];
+          await idbSaveImages(docId, normKey, images, uid);
+          return cloudData;
+        }
+      } catch (e) {
+        console.warn("getFromStore images cloud fetch warn", e);
+      }
+    }
+    return localVal;
+  }
+
+  const localVal = getLocalItem<T>(storeName, normKey);
   const uid = auth.currentUser?.uid;
   if (!uid) return localVal;
 
   try {
-    const docRef = doc(db, storeName, getDocId(key, storeName));
+    const docRef = doc(db, storeName, getDocId(normKey, storeName));
     const docSnap = await getDoc(docRef);
     if (docSnap.exists()) {
       const data = docSnap.data() as T;
-      setLocalItem(storeName, key, data);
+      setLocalItem(storeName, normKey, data);
       return data;
     }
     return localVal;
@@ -105,21 +275,68 @@ export const getFromStore = async <T>(storeName: string, key: string): Promise<T
 };
 
 export const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
-  const localList = getLocalAll<T>(storeName);
   const uid = auth.currentUser?.uid;
+
+  if (storeName === 'images') {
+    const idbList = await idbGetAllImages();
+    const map = new Map<string, any>();
+    idbList.forEach(r => {
+      map.set(r.date, { date: r.date, images: r.images, userId: r.userId });
+    });
+
+    if (uid) {
+      try {
+        const q = query(collection(db, storeName), where("userId", "==", uid));
+        const querySnapshot = await getDocs(q);
+        querySnapshot.docs.forEach(docSnap => {
+          const item = docSnap.data() as any;
+          if (item?.date) {
+            const norm = normalizeDateString(item.date);
+            map.set(norm, { ...item, date: norm });
+            idbSaveImages(getDocId(norm, storeName), norm, item.images || [], uid);
+          }
+        });
+      } catch (e) {
+        console.warn("getAllFromStore images cloud warning", e);
+      }
+    }
+
+    return Array.from(map.values()) as T[];
+  }
+
+  const localList = getLocalAll<T>(storeName);
   if (!uid) return localList;
 
   try {
     const q = query(collection(db, storeName), where("userId", "==", uid));
     const querySnapshot = await getDocs(q);
+    
+    // Merge cloud data and local data seamlessly
+    const mergedMap = new Map<string, T>();
+
+    // First insert all local items
+    localList.forEach((item: any) => {
+      const k = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid || JSON.stringify(item));
+      if (item?.date) item.date = k;
+      mergedMap.set(k, item);
+    });
+
+    // Merge cloud items
     if (!querySnapshot.empty) {
-      const cloudData = querySnapshot.docs.map(doc => doc.data() as T);
-      try {
-        localStorage.setItem(getLocalCollectionKey(storeName), JSON.stringify(cloudData));
-      } catch {}
-      return cloudData;
+      querySnapshot.docs.forEach(docSnap => {
+        const item = docSnap.data() as any;
+        const k = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid || docSnap.id);
+        if (item?.date) item.date = k;
+        mergedMap.set(k, item as T);
+      });
     }
-    return localList;
+
+    const merged = Array.from(mergedMap.values());
+    try {
+      localStorage.setItem(getLocalCollectionKey(storeName), JSON.stringify(merged));
+    } catch {}
+
+    return merged;
   } catch (e) {
     console.warn("getAllFromStore fallback to local cache", e);
     return localList;
@@ -127,13 +344,22 @@ export const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
 };
 
 export const putToStore = async <T>(storeName: string, key: string, data: T): Promise<void> => {
+  const normKey = storeName === 'sales' || storeName === 'images' || storeName === 'attendance' || storeName === 'eod' ? normalizeDateString(key) : key;
   const uid = getUid();
-  const payload = { ...data, userId: uid };
-  setLocalItem(storeName, key, payload);
+  const docId = getDocId(normKey, storeName);
+  const payload = { ...(data as any), userId: (data as any)?.userId || uid };
+  if (payload.date) payload.date = normKey;
+
+  if (storeName === 'images') {
+    const images = (payload as any)?.images || [];
+    await idbSaveImages(docId, normKey, images, uid);
+  } else {
+    setLocalItem(storeName, normKey, payload);
+  }
 
   if (auth.currentUser?.uid) {
     try {
-      const docRef = doc(db, storeName, getDocId(key, storeName));
+      const docRef = doc(db, storeName, docId);
       await setDoc(docRef, payload, { merge: true });
     } catch (e) {
       console.warn("putToStore cloud write warning", e);
@@ -142,10 +368,19 @@ export const putToStore = async <T>(storeName: string, key: string, data: T): Pr
 };
 
 export const deleteFromStore = async (storeName: string, key: string): Promise<void> => {
-  removeLocalItem(storeName, key);
+  const normKey = storeName === 'sales' || storeName === 'images' || storeName === 'attendance' || storeName === 'eod' ? normalizeDateString(key) : key;
+  const docId = getDocId(normKey, storeName);
+
+  if (storeName === 'images') {
+    await idbDeleteImages(docId);
+    await idbDeleteImages(normKey);
+  } else {
+    removeLocalItem(storeName, normKey);
+  }
+
   if (auth.currentUser?.uid) {
     try {
-      await deleteDoc(doc(db, storeName, getDocId(key, storeName)));
+      await deleteDoc(doc(db, storeName, docId));
     } catch (e) {
       console.warn("deleteFromStore cloud delete warning", e);
     }
@@ -154,8 +389,8 @@ export const deleteFromStore = async (storeName: string, key: string): Promise<v
 
 export const saveUser = async (user: UserProfile) => {
   try {
-    const activeUid = getUid() || user.uid || 'default_user';
-    const profileToSave = { ...user, uid: user.uid || activeUid, userId: user.userId || activeUid };
+    const activeUid = auth.currentUser?.uid || user.uid || user.userId || getUid();
+    const profileToSave = { ...user, uid: activeUid, userId: activeUid };
     localStorage.setItem(LS_KEYS.USER, JSON.stringify(profileToSave));
 
     if (auth.currentUser?.uid) {
@@ -188,7 +423,7 @@ export const ensureUserProfileFromGoogle = async (firebaseUser: User): Promise<U
 
   // 2. Try from local storage
   const existingLocal = getUser();
-  if (existingLocal && (existingLocal.uid === firebaseUser.uid || !existingLocal.uid)) {
+  if (existingLocal) {
     const updated = { ...existingLocal, uid: firebaseUser.uid, userId: firebaseUser.uid };
     localStorage.setItem(LS_KEYS.USER, JSON.stringify(updated));
     return updated;
@@ -243,7 +478,9 @@ export const saveTheme = (theme: 'light' | 'dark') => {
 };
 
 export const getSalesWithoutImages = async (): Promise<DailyReport[]> => {
-  return getAllFromStore<DailyReport>('sales');
+  const all = await getAllFromStore<DailyReport>('sales');
+  // Sort descending by date
+  return all.sort((a, b) => b.date.localeCompare(a.date));
 };
 
 export const getSalesByMonth = async (monthPrefix: string): Promise<DailyReport[]> => {
@@ -251,16 +488,18 @@ export const getSalesByMonth = async (monthPrefix: string): Promise<DailyReport[
   return allSales.filter(s => s.date.startsWith(monthPrefix));
 };
 
-export const getSales = (): Promise<DailyReport[]> => getAllFromStore<DailyReport>('sales');
+export const getSales = (): Promise<DailyReport[]> => getSalesWithoutImages();
 
 export const getImagesForDate = async (date: string): Promise<string[]> => {
-  const record = await getFromStore<{date: string, images: string[]}>('images', date);
+  const normDate = normalizeDateString(date);
+  const record = await getFromStore<{date: string, images: string[]}>('images', normDate);
   return record?.images || [];
 };
 
 export const saveSaleEntry = async (date: string, newItems: SaleItem[], newBillImages: string[] = []) => {
-  const existing = await getFromStore<DailyReport>('sales', date);
-  const existingImagesRecord = await getFromStore<{date: string, images: string[]}>('images', date);
+  const normDate = normalizeDateString(date);
+  const existing = await getFromStore<DailyReport>('sales', normDate);
+  const existingImagesRecord = await getFromStore<{date: string, images: string[]}>('images', normDate);
 
   const calculateTotals = (items: SaleItem[]) => ({
     totalQty: items.reduce((acc, item) => acc + (Number(item.quantity) || 0), 0),
@@ -271,7 +510,7 @@ export const saveSaleEntry = async (date: string, newItems: SaleItem[], newBillI
   const mergedImages = [...existingImages, ...newBillImages];
 
   if (mergedImages.length > 0) {
-    await putToStore('images', date, { date, images: mergedImages });
+    await putToStore('images', normDate, { date: normDate, images: mergedImages });
   }
 
   if (existing) {
@@ -279,46 +518,51 @@ export const saveSaleEntry = async (date: string, newItems: SaleItem[], newBillI
     const { totalQty, totalValue } = calculateTotals(updatedItems);
     const reportToSave: DailyReport = {
       ...existing,
+      date: normDate,
       items: updatedItems,
       totalQty,
       totalValue,
     };
     delete reportToSave.billImages;
     delete reportToSave.billImage;
-    await putToStore('sales', date, reportToSave);
+    await putToStore('sales', normDate, reportToSave);
   } else {
     const { totalQty, totalValue } = calculateTotals(newItems);
     const reportToSave: DailyReport = {
-      date,
+      date: normDate,
       items: newItems,
       totalQty,
       totalValue,
     };
-    await putToStore('sales', date, reportToSave);
+    await putToStore('sales', normDate, reportToSave);
   }
 };
 
 export const updateDailyReport = async (date: string, updatedReport: DailyReport) => {
-  const reportToSave = { ...updatedReport };
+  const normDate = normalizeDateString(date);
+  const reportToSave = { ...updatedReport, date: normDate };
   if (reportToSave.billImages !== undefined) {
-    await putToStore('images', date, { date, images: reportToSave.billImages });
+    await putToStore('images', normDate, { date: normDate, images: reportToSave.billImages });
     delete reportToSave.billImages;
     delete reportToSave.billImage;
   }
-  await putToStore('sales', date, reportToSave);
+  await putToStore('sales', normDate, reportToSave);
 };
 
 export const deleteDailyReport = async (date: string) => {
-  await deleteFromStore('sales', date);
-  await deleteFromStore('images', date);
+  const normDate = normalizeDateString(date);
+  await deleteFromStore('sales', normDate);
+  await deleteFromStore('images', normDate);
 };
 
 export const getEODEntries = (): Promise<StoreEODEntry[]> => getAllFromStore<StoreEODEntry>('eod');
 export const saveEODEntry = async (entry: StoreEODEntry) => {
-  await putToStore('eod', entry.date, entry);
+  const normDate = normalizeDateString(entry.date);
+  await putToStore('eod', normDate, { ...entry, date: normDate });
 };
 export const deleteEODEntry = async (date: string) => {
-  await deleteFromStore('eod', date);
+  const normDate = normalizeDateString(date);
+  await deleteFromStore('eod', normDate);
 };
 
 export const getComplaints = (): Promise<Complaint[]> => getAllFromStore<Complaint>('crm');
@@ -342,7 +586,8 @@ export const deleteFollowUp = async (id: string) => {
 
 export const getAttendance = (): Promise<AttendanceEntry[]> => getAllFromStore<AttendanceEntry>('attendance');
 export const saveAttendance = async (entry: AttendanceEntry) => {
-  await putToStore('attendance', entry.date, entry);
+  const normDate = normalizeDateString(entry.date);
+  await putToStore('attendance', normDate, { ...entry, date: normDate });
 };
 
 export const compressImage = (file: File): Promise<string> => {
@@ -378,22 +623,20 @@ export const compressImage = (file: File): Promise<string> => {
         const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
         resolve(dataUrl);
       } else {
-        const reader = new FileReader();
-        reader.onload = (e) => resolve(e.target?.result as string);
-        reader.onerror = (e) => reject(e);
-        reader.readAsDataURL(file);
+        reject(new Error('Canvas context unavailable'));
       }
     };
-    img.onerror = (error) => {
+    img.onerror = () => {
       URL.revokeObjectURL(objectUrl);
-      reject(error);
+      reject(new Error('Failed to load image for compression'));
     };
     img.src = objectUrl;
   });
 };
 
+// FULL UNIVERSAL BACKUP ENGINE
 export interface BackupPackage {
-  app: string;
+  app: 'SalesTrack';
   version: string;
   timestamp: string;
   data: {
@@ -418,7 +661,7 @@ export const exportFullBackup = async (): Promise<void> => {
 
   const backupPackage: BackupPackage = {
     app: 'SalesTrack',
-    version: '2.0.0',
+    version: '2.1.0',
     timestamp: new Date().toISOString(),
     data: {
       user: currentUser || undefined,
@@ -445,196 +688,322 @@ export const exportFullBackup = async (): Promise<void> => {
   URL.revokeObjectURL(url);
 };
 
-export const importFullBackup = async (jsonString: string): Promise<{ success: boolean; message: string }> => {
+/**
+ * Universal JSON Backup Restorer:
+ * Supports every historical structure, flat array, nested package, date-keyed dictionary,
+ * legacy field names, and formats with automatic date & type normalization.
+ */
+export const importFullBackup = async (jsonString: string): Promise<{ success: boolean; message: string; count: number }> => {
   try {
     if (!jsonString || typeof jsonString !== 'string') {
-      return { success: false, message: 'Empty or invalid backup file.' };
+      return { success: false, message: 'Empty or invalid backup file.', count: 0 };
     }
 
     let parsed: any;
     try {
       parsed = JSON.parse(jsonString);
     } catch (e: any) {
-      return { success: false, message: 'Invalid JSON format: ' + (e.message || String(e)) };
-    }
-
-    // Extract payload from various formats (wrapper object or direct object or array)
-    let payloadData: any = {};
-    if (parsed && typeof parsed === 'object') {
-      if (parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data)) {
-        payloadData = parsed.data;
-      } else if (Array.isArray(parsed)) {
-        payloadData = { sales: parsed };
-      } else {
-        payloadData = parsed;
-      }
+      return { success: false, message: 'Invalid JSON syntax: ' + (e.message || String(e)), count: 0 };
     }
 
     const currentUid = getUid();
+    let salesReportsToImport: DailyReport[] = [];
+    let eodEntriesToImport: StoreEODEntry[] = [];
+    let crmEntriesToImport: Complaint[] = [];
+    let followupsToImport: FollowUp[] = [];
+    let attendanceToImport: AttendanceEntry[] = [];
+    let standaloneImagesToImport: { date: string; images: string[] }[] = [];
+    let restoredUser: UserProfile | undefined = undefined;
 
-    // 1. Restore User Profile
-    const userToRestore: UserProfile | undefined = payloadData.user || payloadData.userProfile || parsed.user;
-    if (userToRestore && typeof userToRestore === 'object') {
+    // Helper to normalize single sale item
+    const normalizeSaleItem = (si: any, dateKey: string, idx: number): SaleItem => {
+      const name = si.productName || si.product || si.name || si.model || si.title || si.item || 'Sales Item';
+      const qty = Number(si.quantity || si.qty || si.count || si.q || 1) || 1;
+      const price = Number(si.price || si.rate || si.amount || si.cost || si.unitPrice || si.mrp || 0) || 0;
+      const phone = si.customerPhone || si.phone || si.mobile || si.customerMobile || si.contact || '';
+      const bill = si.billId || si.invoiceNo || si.invoice || si.billNo || si.bill || '';
+      const txn = si.txnNumber || si.txn || si.transactionId || '';
+      const id = si.id || `item_${dateKey}_${idx}_${Date.now()}`;
+
+      return {
+        id,
+        productName: String(name),
+        quantity: qty,
+        price: price,
+        customerPhone: String(phone),
+        billId: String(bill),
+        txnNumber: String(txn),
+      };
+    };
+
+    // CASE 1: Flat Array of Daily Reports or Flat Array of Sale Items
+    if (Array.isArray(parsed)) {
+      const dateMap = new Map<string, DailyReport>();
+
+      parsed.forEach((entry: any, index: number) => {
+        if (!entry) return;
+        const rawDate = entry.date || entry.saleDate || entry.createdDate || entry.timestamp || new Date().toISOString();
+        const dateKey = normalizeDateString(rawDate);
+
+        if (Array.isArray(entry.items || entry.saleItems)) {
+          // It's a daily report object
+          const rawItems = entry.items || entry.saleItems || [];
+          const normalizedItems = rawItems.map((si: any, i: number) => normalizeSaleItem(si, dateKey, i));
+          const totalQty = entry.totalQty !== undefined ? Number(entry.totalQty) : normalizedItems.reduce((s: number, i: SaleItem) => s + i.quantity, 0);
+          const totalValue = entry.totalValue !== undefined ? Number(entry.totalValue) : normalizedItems.reduce((s: number, i: SaleItem) => s + (i.price * i.quantity), 0);
+
+          dateMap.set(dateKey, {
+            date: dateKey,
+            items: normalizedItems,
+            totalQty,
+            totalValue,
+            isWeekOff: Boolean(entry.isWeekOff || entry.weekOff),
+            notes: entry.notes || '',
+            userId: currentUid,
+          });
+        } else if (entry.productName || entry.product || entry.name || entry.price || entry.amount) {
+          // Flat individual item row
+          const item = normalizeSaleItem(entry, dateKey, index);
+          const existing = dateMap.get(dateKey) || {
+            date: dateKey,
+            items: [],
+            totalQty: 0,
+            totalValue: 0,
+            isWeekOff: false,
+            notes: '',
+            userId: currentUid,
+          };
+          existing.items.push(item);
+          existing.totalQty += item.quantity;
+          existing.totalValue += (item.price * item.quantity);
+          dateMap.set(dateKey, existing);
+        }
+      });
+
+      salesReportsToImport = Array.from(dateMap.values());
+    } 
+    // CASE 2: Nested Object or Package or Key-Value Dictionary
+    else if (parsed && typeof parsed === 'object') {
+      const payload = parsed.data && typeof parsed.data === 'object' && !Array.isArray(parsed.data) ? parsed.data : parsed;
+
+      // Extract User Profile
+      restoredUser = payload.user || payload.userProfile || parsed.user;
+
+      // Extract Sales
+      const rawSales = payload.sales || payload.reports || payload.salesData || payload.entries || payload.dailyReports || payload.allSales;
+
+      if (Array.isArray(rawSales)) {
+        rawSales.forEach((item: any) => {
+          if (!item || !item.date) return;
+          const dateKey = normalizeDateString(item.date);
+          const rawItems = item.items || item.saleItems || [];
+          const normalizedItems = Array.isArray(rawItems) ? rawItems.map((si: any, i: number) => normalizeSaleItem(si, dateKey, i)) : [];
+          const totalQty = item.totalQty !== undefined ? Number(item.totalQty) : normalizedItems.reduce((sum, i) => sum + i.quantity, 0);
+          const totalValue = item.totalValue !== undefined ? Number(item.totalValue) : normalizedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+
+          salesReportsToImport.push({
+            date: dateKey,
+            items: normalizedItems,
+            totalQty,
+            totalValue,
+            isWeekOff: Boolean(item.isWeekOff || item.weekOff),
+            notes: item.notes || '',
+            userId: currentUid,
+          });
+
+          const embeddedImages: string[] = item.billImages || (item.billImage ? [item.billImage] : []);
+          if (embeddedImages.length > 0) {
+            standaloneImagesToImport.push({ date: dateKey, images: embeddedImages });
+          }
+        });
+      } else if (rawSales && typeof rawSales === 'object') {
+        // Date-keyed object dictionary: { "2024-05-12": { items: [...] } }
+        Object.entries(rawSales).forEach(([k, v]: [string, any]) => {
+          if (!v) return;
+          const dateKey = normalizeDateString(v.date || k);
+          const rawItems = v.items || v.saleItems || (Array.isArray(v) ? v : []);
+          const normalizedItems = Array.isArray(rawItems) ? rawItems.map((si: any, i: number) => normalizeSaleItem(si, dateKey, i)) : [];
+          const totalQty = v.totalQty !== undefined ? Number(v.totalQty) : normalizedItems.reduce((sum, i) => sum + i.quantity, 0);
+          const totalValue = v.totalValue !== undefined ? Number(v.totalValue) : normalizedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+
+          salesReportsToImport.push({
+            date: dateKey,
+            items: normalizedItems,
+            totalQty,
+            totalValue,
+            isWeekOff: Boolean(v.isWeekOff || v.weekOff),
+            notes: v.notes || '',
+            userId: currentUid,
+          });
+        });
+      } else {
+        // Check if root object itself contains date keys: { "2024-05-01": {...}, "2024-05-02": {...} }
+        const potentialDateKeys = Object.keys(parsed).filter(k => /^\d{4}[-/]\d{1,2}[-/]\d{1,2}/.test(k) || /^\d{1,2}[-/]\d{1,2}[-/]\d{4}/.test(k));
+        if (potentialDateKeys.length > 0) {
+          potentialDateKeys.forEach(k => {
+            const v = parsed[k];
+            if (!v) return;
+            const dateKey = normalizeDateString(v.date || k);
+            const rawItems = v.items || v.saleItems || (Array.isArray(v) ? v : []);
+            const normalizedItems = Array.isArray(rawItems) ? rawItems.map((si: any, i: number) => normalizeSaleItem(si, dateKey, i)) : [];
+            const totalQty = v.totalQty !== undefined ? Number(v.totalQty) : normalizedItems.reduce((sum, i) => sum + i.quantity, 0);
+            const totalValue = v.totalValue !== undefined ? Number(v.totalValue) : normalizedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
+
+            salesReportsToImport.push({
+              date: dateKey,
+              items: normalizedItems,
+              totalQty,
+              totalValue,
+              isWeekOff: Boolean(v.isWeekOff || v.weekOff),
+              notes: v.notes || '',
+              userId: currentUid,
+            });
+          });
+        }
+      }
+
+      // Extract EOD
+      const rawEod = payload.eod || payload.eodEntries || [];
+      if (Array.isArray(rawEod)) {
+        rawEod.forEach((entry: any) => {
+          if (!entry || !entry.date) return;
+          eodEntriesToImport.push({
+            date: normalizeDateString(entry.date),
+            achievement: Number(entry.achievement || entry.dayAchieve || 0) || 0,
+            eolAchieve: Number(entry.eolAchieve || 0) || 0,
+            dayTarget: Number(entry.dayTarget || 0) || 0,
+            weekTarget: Number(entry.weekTarget || 0) || 0,
+            eolTarget: Number(entry.eolTarget || 0) || 0,
+            userId: currentUid,
+          });
+        });
+      }
+
+      // Extract CRM
+      const rawCrm = payload.crm || payload.complaints || [];
+      if (Array.isArray(rawCrm)) {
+        rawCrm.forEach((comp: any) => {
+          if (!comp) return;
+          crmEntriesToImport.push({
+            id: String(comp.id || `crm_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`),
+            customerName: comp.customerName || comp.name || 'Customer',
+            phoneNumber: comp.phoneNumber || comp.phone || '',
+            productModel: comp.productModel || comp.product || comp.model || 'Model',
+            issueType: comp.issueType || 'Complaint',
+            customProductName: comp.customProductName || '',
+            status: comp.status || (comp.isResolved ? 'Resolved' : 'Raised'),
+            timeline: Array.isArray(comp.timeline) ? comp.timeline : [
+              { status: comp.status || 'Raised', date: comp.date || new Date().toISOString(), note: 'Imported' }
+            ],
+            date: normalizeDateString(comp.date || new Date().toISOString()),
+            repairsDone: comp.repairsDone || '',
+            partsReplaced: comp.partsReplaced || '',
+            userId: currentUid,
+          });
+        });
+      }
+
+      // Extract Followups
+      const rawFollowups = payload.followups || payload.followUps || [];
+      if (Array.isArray(rawFollowups)) {
+        rawFollowups.forEach((fu: any) => {
+          if (!fu) return;
+          followupsToImport.push({
+            id: String(fu.id || `fu_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`),
+            customerName: fu.customerName || 'Customer',
+            phoneNumber: fu.phoneNumber || '',
+            reminderDate: normalizeDateString(fu.reminderDate || new Date().toISOString()),
+            note: fu.note || '',
+            isCompleted: Boolean(fu.isCompleted),
+            createdAt: fu.createdAt || new Date().toISOString(),
+            userId: currentUid,
+          });
+        });
+      }
+
+      // Extract Attendance
+      const rawAttendance = payload.attendance || payload.attendanceList || [];
+      if (Array.isArray(rawAttendance)) {
+        rawAttendance.forEach((att: any) => {
+          if (!att || !att.date) return;
+          attendanceToImport.push({
+            date: normalizeDateString(att.date),
+            status: att.status || 'Present',
+            checkInTime: att.checkInTime || '',
+            location: att.location || undefined,
+            userId: currentUid,
+          });
+        });
+      }
+
+      // Extract Images
+      const rawImages = payload.images || [];
+      if (Array.isArray(rawImages)) {
+        rawImages.forEach((img: any) => {
+          if (img && img.date && Array.isArray(img.images)) {
+            standaloneImagesToImport.push({ date: normalizeDateString(img.date), images: img.images });
+          }
+        });
+      }
+    }
+
+    // PERSIST ALL IMPORTED DATA
+    // 1. User Profile
+    if (restoredUser && typeof restoredUser === 'object') {
       const activeUser = getUser();
       const updatedUser: UserProfile = {
-        ...userToRestore,
-        uid: activeUser?.uid || userToRestore.uid || currentUid,
-        userId: activeUser?.userId || userToRestore.userId || currentUid,
-        name: userToRestore.name || activeUser?.name || 'Sales Executive',
-        storeName: userToRestore.storeName || activeUser?.storeName || 'RELIANCE DIGITAL',
-        monthlyTarget: Number(userToRestore.monthlyTarget) || activeUser?.monthlyTarget || 100000,
-        employeeId: userToRestore.employeeId || activeUser?.employeeId || 'EMP-1001',
-        phoneNumber: userToRestore.phoneNumber || activeUser?.phoneNumber || '',
+        ...restoredUser,
+        uid: activeUser?.uid || restoredUser.uid || currentUid,
+        userId: activeUser?.userId || restoredUser.userId || currentUid,
+        name: restoredUser.name || activeUser?.name || 'Sales Executive',
+        storeName: restoredUser.storeName || activeUser?.storeName || 'RELIANCE DIGITAL',
+        monthlyTarget: Number(restoredUser.monthlyTarget) || activeUser?.monthlyTarget || 100000,
+        employeeId: restoredUser.employeeId || activeUser?.employeeId || 'EMP-1001',
+        phoneNumber: restoredUser.phoneNumber || activeUser?.phoneNumber || '',
       };
       await saveUser(updatedUser);
     }
 
-    // 2. Restore Sales Reports
-    const rawSales: any[] = payloadData.sales || payloadData.reports || payloadData.salesData || payloadData.entries || [];
-    let salesRestoredCount = 0;
-    if (Array.isArray(rawSales)) {
-      for (const item of rawSales) {
-        if (!item || !item.date) continue;
-        const dateKey = String(item.date).trim();
-        
-        // Normalize items array
-        const rawItems = item.items || item.saleItems || [];
-        const normalizedItems: SaleItem[] = Array.isArray(rawItems) ? rawItems.map((si: any, idx: number) => ({
-          id: si.id || `item_${dateKey}_${idx}_${Date.now()}`,
-          productName: si.productName || si.product || si.name || 'Sales Item',
-          quantity: Number(si.quantity || si.qty || 1) || 1,
-          price: Number(si.price || si.rate || si.amount || 0) || 0,
-          customerPhone: si.customerPhone || si.phone || '',
-          billId: si.billId || si.invoiceNo || '',
-          txnNumber: si.txnNumber || '',
-        })) : [];
-
-        const totalQty = item.totalQty !== undefined ? Number(item.totalQty) : normalizedItems.reduce((sum, i) => sum + i.quantity, 0);
-        const totalValue = item.totalValue !== undefined ? Number(item.totalValue) : normalizedItems.reduce((sum, i) => sum + (i.price * i.quantity), 0);
-
-        const cleanReport: DailyReport = {
-          date: dateKey,
-          items: normalizedItems,
-          totalQty,
-          totalValue,
-          isWeekOff: Boolean(item.isWeekOff),
-          notes: item.notes || '',
-          userId: currentUid,
-        };
-
-        // Extract any attached images
-        const embeddedImages: string[] = item.billImages || (item.billImage ? [item.billImage] : []);
-        if (embeddedImages.length > 0) {
-          await putToStore('images', dateKey, { date: dateKey, images: embeddedImages });
-        }
-
-        await putToStore('sales', dateKey, cleanReport);
-        salesRestoredCount++;
-      }
+    // 2. Sales Reports
+    for (const report of salesReportsToImport) {
+      await putToStore('sales', report.date, report);
     }
 
-    // 3. Restore Standalone Images
-    const rawImages: any[] = payloadData.images || [];
-    if (Array.isArray(rawImages)) {
-      for (const imgItem of rawImages) {
-        if (imgItem && imgItem.date && Array.isArray(imgItem.images) && imgItem.images.length > 0) {
-          await putToStore('images', imgItem.date, { date: imgItem.date, images: imgItem.images });
-        }
-      }
+    // 3. Images
+    for (const img of standaloneImagesToImport) {
+      await putToStore('images', img.date, img);
     }
 
-    // 4. Restore EOD Entries
-    const rawEod: any[] = payloadData.eod || payloadData.eodEntries || [];
-    let eodCount = 0;
-    if (Array.isArray(rawEod)) {
-      for (const entry of rawEod) {
-        if (!entry || !entry.date) continue;
-        const eodPayload: StoreEODEntry = {
-          date: String(entry.date).trim(),
-          achievement: Number(entry.achievement || entry.dayAchieve || 0) || 0,
-          eolAchieve: Number(entry.eolAchieve || 0) || 0,
-          dayTarget: Number(entry.dayTarget || 0) || 0,
-          weekTarget: Number(entry.weekTarget || 0) || 0,
-          eolTarget: Number(entry.eolTarget || 0) || 0,
-          userId: currentUid,
-        };
-        await putToStore('eod', eodPayload.date, eodPayload);
-        eodCount++;
-      }
+    // 4. EOD
+    for (const eod of eodEntriesToImport) {
+      await putToStore('eod', eod.date, eod);
     }
 
-    // 5. Restore CRM Complaints
-    const rawCrm: any[] = payloadData.crm || payloadData.complaints || [];
-    let crmCount = 0;
-    if (Array.isArray(rawCrm)) {
-      for (const comp of rawCrm) {
-        if (!comp) continue;
-        const compId = String(comp.id || `crm_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
-        const crmPayload: Complaint = {
-          id: compId,
-          customerName: comp.customerName || comp.name || 'Customer',
-          phoneNumber: comp.phoneNumber || comp.phone || '',
-          productModel: comp.productModel || comp.product || comp.model || 'Model',
-          issueType: comp.issueType || 'Complaint',
-          customProductName: comp.customProductName || '',
-          status: comp.status || (comp.isResolved ? 'Resolved' : 'Raised'),
-          timeline: Array.isArray(comp.timeline) ? comp.timeline : [
-            { status: comp.status || 'Raised', date: comp.date || new Date().toISOString(), note: 'Imported complaint' }
-          ],
-          date: comp.date || new Date().toISOString().split('T')[0],
-          repairsDone: comp.repairsDone || '',
-          partsReplaced: comp.partsReplaced || '',
-          userId: currentUid,
-        };
-        await putToStore('crm', compId, crmPayload);
-        crmCount++;
-      }
+    // 5. CRM
+    for (const crm of crmEntriesToImport) {
+      await putToStore('crm', crm.id, crm);
     }
 
-    // 6. Restore Follow-ups
-    const rawFollowups: any[] = payloadData.followups || payloadData.followUps || [];
-    if (Array.isArray(rawFollowups)) {
-      for (const fu of rawFollowups) {
-        if (!fu) continue;
-        const fuId = String(fu.id || `fu_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`);
-        const fuPayload: FollowUp = {
-          id: fuId,
-          customerName: fu.customerName || 'Customer',
-          phoneNumber: fu.phoneNumber || '',
-          reminderDate: fu.reminderDate || new Date().toISOString().split('T')[0],
-          note: fu.note || '',
-          isCompleted: Boolean(fu.isCompleted),
-          createdAt: fu.createdAt || new Date().toISOString(),
-          userId: currentUid,
-        };
-        await putToStore('followups', fuId, fuPayload);
-      }
+    // 6. Followups
+    for (const fu of followupsToImport) {
+      await putToStore('followups', fu.id, fu);
     }
 
-    // 7. Restore Attendance
-    const rawAttendance: any[] = payloadData.attendance || payloadData.attendanceList || [];
-    if (Array.isArray(rawAttendance)) {
-      for (const att of rawAttendance) {
-        if (!att || !att.date) continue;
-        const attPayload: AttendanceEntry = {
-          date: String(att.date).trim(),
-          status: att.status || 'Present',
-          checkInTime: att.checkInTime || '',
-          location: att.location || undefined,
-          userId: currentUid,
-        };
-        await putToStore('attendance', attPayload.date, attPayload);
-      }
+    // 7. Attendance
+    for (const att of attendanceToImport) {
+      await putToStore('attendance', att.date, att);
     }
 
     return {
       success: true,
-      message: `Successfully imported ${salesRestoredCount} sales reports, ${eodCount} EOD records, and ${crmCount} CRM cases.`,
+      count: salesReportsToImport.length,
+      message: `Restored ${salesReportsToImport.length} sales reports, ${eodEntriesToImport.length} EOD entries, and ${crmEntriesToImport.length} CRM cases successfully.`,
     };
   } catch (err: any) {
     console.error("importFullBackup failed", err);
     return {
       success: false,
+      count: 0,
       message: 'Restore failed: ' + (err?.message || String(err)),
     };
   }

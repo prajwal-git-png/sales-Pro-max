@@ -20,10 +20,17 @@ async function startServer() {
         return res.status(400).json({ error: "API Key not found." });
       }
 
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
       
       const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
+        model: "gemini-3.7-flash",
         contents: [
             {
                 role: "user",
@@ -78,7 +85,7 @@ async function startServer() {
       res.json(result);
     } catch (error: any) {
       console.error("Gemini Extraction Error:", error);
-      res.status(500).json({ error: error.message || "Failed to extract" });
+      res.status(500).json({ error: error.message || "Failed to extract bill details." });
     }
   });
 
@@ -89,11 +96,18 @@ async function startServer() {
       const apiKey = userApiKey || process.env.GEMINI_API_KEY;
       if (!apiKey) return res.status(400).json({ error: "API_KEY_MISSING" });
 
-      const ai = new GoogleGenAI({ apiKey });
+      const ai = new GoogleGenAI({ 
+        apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build'
+          }
+        }
+      });
       const chat = ai.chats.create({
-          model: "gemini-3.1-pro-preview",
+          model: "gemini-3.7-flash",
           config: {
-              systemInstruction: `You are a Bajaj Sales Coach for ${user.name} at ${user.storeName}. 
+              systemInstruction: `You are a Bajaj Sales Coach for ${user?.name || 'Executive'} at ${user?.storeName || 'Store'}. 
               Your goal is to help them sell more Bajaj products. 
               Be encouraging, professional, and data-driven. 
               Current Sales Data: ${JSON.stringify((sales || []).slice(-5))}

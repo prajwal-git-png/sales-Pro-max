@@ -35,10 +35,12 @@ export const generateTextReport = (user: UserProfile, report: DailyReport, allSa
 
   // Categorization Logic Helper
   const getQty = (keywords: string[]) => {
-      return report.items.reduce((acc, item) => {
-          const name = item.productName.toLowerCase();
+      const items = Array.isArray(report.items) ? report.items : [];
+      return items.reduce((acc, item) => {
+          if (!item) return acc;
+          const name = (item.productName || '').toLowerCase();
           const matches = keywords.every(k => name.includes(k.toLowerCase()));
-          return matches ? acc + item.quantity : acc;
+          return matches ? acc + (item.quantity || 0) : acc;
       }, 0);
   };
 
@@ -55,15 +57,17 @@ export const generateTextReport = (user: UserProfile, report: DailyReport, allSa
   const bajajDryIronQty = getQty(['bajaj', 'dry', 'iron']);
   const bajajInductionQty = getQty(['bajaj', 'induction']);
   const bajajSandwichQty = getQty(['bajaj', 'sandwich']);
-  const bajajCoolerQty = report.items.reduce((acc, item) => {
-      const name = item.productName.toLowerCase();
+  const reportItems = Array.isArray(report.items) ? report.items : [];
+  const bajajCoolerQty = reportItems.reduce((acc, item) => {
+      if (!item) return acc;
+      const name = (item.productName || '').toLowerCase();
       const isCooler = name.includes('cooler') || 
                        name.includes('glanza') || 
                        name.includes('elevate') || 
                        name.includes('shield') || 
                        name.includes('mighty') || 
                        name.includes('tmh50');
-      return isCooler ? acc + item.quantity : acc;
+      return isCooler ? acc + (item.quantity || 0) : acc;
   }, 0);
 
   // Formatting Function to ensure 2 digits (e.g., 01, 05)
@@ -118,14 +122,15 @@ export const downloadCSV = (sales: DailyReport[]) => {
     const headers = ['Date', 'Product', 'Quantity', 'Unit Price', 'Total Value'];
     const rows: string[] = [];
     
-    sales.forEach(report => {
-        report.items.forEach(item => {
+    (sales || []).forEach(report => {
+        (report?.items || []).forEach(item => {
+            if (!item) return;
             rows.push([
-                report.date,
-                `"${item.productName}"`, // Escape quotes
-                item.quantity.toString(),
-                item.price.toString(),
-                (item.quantity * item.price).toString()
+                report.date || '',
+                `"${(item.productName || '').replace(/"/g, '""')}"`, // Escape quotes
+                (item.quantity || 0).toString(),
+                (item.price || 0).toString(),
+                ((item.quantity || 0) * (item.price || 0)).toString()
             ].join(','));
         });
     });

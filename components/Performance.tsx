@@ -59,10 +59,10 @@ const Performance: React.FC<PerformanceProps> = ({ sales }) => {
     return weekData.days.map(day => {
       const daySales = weekData.filteredSales.find(s => s.date === day);
       let value = 0;
-      if (daySales) {
+      if (daySales && Array.isArray(daySales.items)) {
         daySales.items.forEach(item => {
-          if (selectedCategory === 'All' || getCategory(item.productName) === selectedCategory) {
-            value += item.price * item.quantity;
+          if (selectedCategory === 'All' || getCategory(item.productName || '') === selectedCategory) {
+            value += (item.price || 0) * (item.quantity || 1);
           }
         });
       }
@@ -81,10 +81,14 @@ const Performance: React.FC<PerformanceProps> = ({ sales }) => {
       'Integrated Kitchen': 0,
       'Others': 0
     };
-    weekData.filteredSales.forEach(s => s.items.forEach(item => {
-      const cat = getCategory(item.productName);
-      counts[cat] = (counts[cat] || 0) + item.quantity;
-    }));
+    weekData.filteredSales.forEach(s => {
+      if (Array.isArray(s.items)) {
+        s.items.forEach(item => {
+          const cat = getCategory(item.productName || '');
+          counts[cat] = (counts[cat] || 0) + (item.quantity || 1);
+        });
+      }
+    });
     return Object.entries(counts)
       .filter(([_, value]) => value > 0)
       .map(([name, value]) => ({ name, value }));
@@ -215,8 +219,8 @@ const Performance: React.FC<PerformanceProps> = ({ sales }) => {
             <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">Sold Items</h3>
           </div>
           <div className="space-y-3 max-h-[200px] overflow-y-auto pr-2 custom-scrollbar">
-            {weekData.filteredSales.flatMap(s => s.items)
-              .filter(item => selectedCategory === 'All' || getCategory(item.productName) === selectedCategory)
+            {weekData.filteredSales.flatMap(s => s.items || [])
+              .filter(item => Boolean(item) && (selectedCategory === 'All' || getCategory(item.productName || '') === selectedCategory))
               .map((item, idx) => (
                 <div key={idx} className="flex items-center justify-between p-3 bg-zinc-50 dark:bg-zinc-800/50 rounded-2xl border border-zinc-100 dark:border-zinc-700">
                   <div>
