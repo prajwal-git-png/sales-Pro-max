@@ -1,18 +1,25 @@
-const CACHE_NAME = 'salestrack-v3';
+const CACHE_NAME = 'salestrack-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/icon-192.png',
-  '/icon-512.png'
+  '/icon-192-maskable.png',
+  '/icon-512.png',
+  '/icon-512-maskable.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS).catch((err) => {
-        console.warn('SW pre-cache warning:', err);
-      });
+    caches.open(CACHE_NAME).then(async (cache) => {
+      // Add assets individually so one failure does not break the entire install
+      await Promise.all(
+        STATIC_ASSETS.map((asset) => 
+          cache.add(asset).catch((err) => {
+            console.warn('SW pre-cache skip for:', asset, err);
+          })
+        )
+      );
     })
   );
   self.skipWaiting();

@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
+import { GlassCard, GlassInput, GlassButton } from './ui/GlassComponents';
 import { UserProfile } from '../types';
 import { saveUser, ensureUserProfileFromGoogle } from '../services/storageService';
 import { loginWithGooglePopup, loginWithGoogleRedirect, checkRedirectResult, auth } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { AlertCircle, RefreshCw, Smartphone, Download } from 'lucide-react';
-import { usePWAInstall } from './InstallPWA';
+import { AlertCircle, RefreshCw, Smartphone, Download, ExternalLink } from 'lucide-react';
+import { usePWAInstall, InstallModal } from './InstallPWA';
 
 interface AuthProps {
   onLogin: (user: UserProfile) => void;
@@ -30,8 +30,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [authNotice, setAuthNotice] = useState('');
   const [googleUser, setGoogleUser] = useState<any>(null);
 
-  const { isInstallable, isInstalled, triggerInstall } = usePWAInstall();
-  const [showIOSModal, setShowIOSModal] = useState(false);
+  const { isInstallable, isInstalled, isInIframe, triggerInstall } = usePWAInstall();
+  const [showInstallModal, setShowInstallModal] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -170,12 +170,18 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       {/* Install App Quick Pill */}
       {!isInstalled && isInstallable && (
         <button
-          onClick={() => triggerInstall(() => setShowIOSModal(true))}
+          onClick={() => {
+            if (isInIframe) {
+              setShowInstallModal(true);
+            } else {
+              triggerInstall(() => setShowInstallModal(true));
+            }
+          }}
           className="mb-4 px-4 py-2 rounded-full bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl border border-zinc-200 dark:border-white/10 text-xs font-bold text-zinc-800 dark:text-zinc-200 shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2 z-10"
         >
           <Smartphone size={14} className="text-blue-500" />
           <span>Install SalesTrack App</span>
-          <Download size={12} className="text-zinc-400" />
+          {isInIframe ? <ExternalLink size={12} className="text-amber-500" /> : <Download size={12} className="text-zinc-400" />}
         </button>
       )}
 
@@ -302,20 +308,8 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
         </form>
       </GlassCard>
 
-      {/* iOS Installation Instruction Modal */}
-      <Modal isOpen={showIOSModal} onClose={() => setShowIOSModal(false)} title="Install on iPhone / iPad">
-        <div className="space-y-4 text-xs text-zinc-700 dark:text-zinc-300">
-          <p>Install SalesTrack for offline access and full-screen experience:</p>
-          <ol className="space-y-2 list-decimal list-inside bg-zinc-100 dark:bg-zinc-800/60 p-3 rounded-2xl">
-            <li>Tap the <strong>Share</strong> button at the bottom of Safari.</li>
-            <li>Scroll down and tap <strong>Add to Home Screen</strong>.</li>
-            <li>Tap <strong>Add</strong> in the top-right corner.</li>
-          </ol>
-          <GlassButton onClick={() => setShowIOSModal(false)} className="w-full rounded-2xl py-3">
-            Understood
-          </GlassButton>
-        </div>
-      </Modal>
+      {/* Universal Installation Guide Modal */}
+      <InstallModal isOpen={showInstallModal} onClose={() => setShowInstallModal(false)} />
     </div>
   );
 };

@@ -1,11 +1,11 @@
 import { useState, useRef } from 'react';
-import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon, FileSpreadsheet, Smartphone, Share2, PlusSquare, Sparkles } from 'lucide-react';
+import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon, FileSpreadsheet, Smartphone } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile, StoreLocation } from '../types';
 import { saveUser, compressImage, exportFullBackup, importFullBackup } from '../services/storageService';
 import { ReportAdjuster } from './ReportAdjuster';
-import { usePWAInstall } from './InstallPWA';
+import { usePWAInstall, InstallModal } from './InstallPWA';
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
@@ -47,7 +47,7 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [statusNotification, setStatusNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   
-  const { isInstalled, triggerInstall, isIOS } = usePWAInstall();
+  const { isInstalled, isInIframe, triggerInstall } = usePWAInstall();
   const [showPwaGuideModal, setShowPwaGuideModal] = useState(false);
 
   const showStatus = (text: string, type: 'success' | 'error' = 'success') => {
@@ -390,10 +390,17 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
                   </div>
                 ) : (
                   <GlassButton
-                    onClick={() => triggerInstall(() => setShowPwaGuideModal(true))}
+                    onClick={() => {
+                      if (isInIframe) {
+                        setShowPwaGuideModal(true);
+                      } else {
+                        triggerInstall(() => setShowPwaGuideModal(true));
+                      }
+                    }}
                     className="text-xs px-4 py-2 rounded-2xl flex items-center gap-1.5 !bg-blue-600 !border-blue-500 text-white"
                   >
-                    <Download size={14} /> Install App
+                    {isInIframe ? <Smartphone size={14} /> : <Download size={14} />} 
+                    <span>{isInIframe ? 'Install App' : 'Install App'}</span>
                   </GlassButton>
                 )}
             </div>
@@ -451,55 +458,8 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
             <GlassButton onClick={handleSaveLocation} className="w-full rounded-3xl py-3">Register Location</GlassButton>
         </Modal>
 
-        {/* PWA Install Guide Modal */}
-        <Modal isOpen={showPwaGuideModal} onClose={() => setShowPwaGuideModal(false)} title="Install SalesTrack App">
-            <div className="space-y-4 text-zinc-800 dark:text-zinc-200">
-                <div className="flex items-center gap-3 p-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl">
-                    <Sparkles className="w-5 h-5 text-blue-500 shrink-0" />
-                    <p className="text-xs font-medium text-blue-900 dark:text-blue-200">
-                        Install SalesTrack to your device home screen for instant access and full offline daily reporting.
-                    </p>
-                </div>
-
-                {isIOS ? (
-                    <div className="space-y-3">
-                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">iOS Safari Steps:</p>
-                        <ol className="space-y-2.5 text-xs">
-                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
-                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">1</span>
-                                <span>Tap the <strong>Share button</strong> <Share2 className="w-3.5 h-3.5 inline mx-1 text-blue-500" /> in Safari.</span>
-                            </li>
-                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
-                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">2</span>
-                                <span>Scroll and select <strong>'Add to Home Screen'</strong> <PlusSquare className="w-3.5 h-3.5 inline mx-1 text-blue-500" />.</span>
-                            </li>
-                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
-                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">3</span>
-                                <span>Tap <strong>'Add'</strong> in the top-right corner.</span>
-                            </li>
-                        </ol>
-                    </div>
-                ) : (
-                    <div className="space-y-3">
-                        <p className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Chrome / Edge / Android Steps:</p>
-                        <ol className="space-y-2.5 text-xs">
-                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
-                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">1</span>
-                                <span>Click the <strong>Install App icon</strong> in the browser address bar or menu.</span>
-                            </li>
-                            <li className="flex items-center gap-2.5 p-2.5 bg-zinc-100 dark:bg-zinc-800/60 rounded-xl">
-                                <span className="w-5 h-5 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">2</span>
-                                <span>Tap <strong>'Install'</strong> to create the standalone app on your home screen or desktop.</span>
-                            </li>
-                        </ol>
-                    </div>
-                )}
-
-                <GlassButton onClick={() => setShowPwaGuideModal(false)} className="w-full mt-2 rounded-2xl py-3 text-sm">
-                    Close Guide
-                </GlassButton>
-            </div>
-        </Modal>
+        {/* Universal PWA Install Modal */}
+        <InstallModal isOpen={showPwaGuideModal} onClose={() => setShowPwaGuideModal(false)} />
 
         {showReportAdjuster && backupMonth && (
             <ReportAdjuster
