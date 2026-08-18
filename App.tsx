@@ -28,32 +28,47 @@ const App = () => {
         document.documentElement.classList.add('dark');
       }
 
+      // 1. Immediately check local storage
       const storedUser = getUser();
       if (storedUser) {
         setUser(storedUser);
       }
-      
-      onAuthStateChanged(auth, async (firebaseUser) => {
+
+      // 2. Load stored sales data
+      try {
+        const storedSales = await getSalesWithoutImages();
+        setSalesData(storedSales);
+      } catch (e) {
+        console.warn("Initial sales load error", e);
+      }
+
+      // 3. Listen to Firebase Auth state
+      const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         if (firebaseUser) {
-          const { getFromStore } = await import('./services/storageService');
-          const profile = await getFromStore<UserProfile>('users', firebaseUser.uid);
-          if (profile) {
-             const fullUser = { ...profile, uid: firebaseUser.uid };
-             setUser(fullUser);
-             saveUser(fullUser);
+          try {
+            const { getFromStore } = await import('./services/storageService');
+            const profile = await getFromStore<UserProfile>('users', firebaseUser.uid);
+            if (profile) {
+              const fullUser = { ...profile, uid: firebaseUser.uid };
+              setUser(fullUser);
+              saveUser(fullUser);
+            }
+          } catch (err) {
+            console.warn("Error fetching cloud profile:", err);
           }
-          const storedSales = await getSalesWithoutImages();
-          setSalesData(storedSales);
-          setIsLoading(false);
-        } else {
-          logoutUser();
-          setUser(null);
-          setIsLoading(false);
         }
+        setIsLoading(false);
       });
-      
-      // Sophisticated splash timeout
-      // setTimeout removed
+
+      // Quick timeout fallback so splash screen never gets stuck
+      const timer = setTimeout(() => {
+        setIsLoading(false);
+      }, 1000);
+
+      return () => {
+        unsubscribe();
+        clearTimeout(timer);
+      };
     };
 
     initApp();
@@ -88,40 +103,25 @@ const App = () => {
         <div className="absolute top-[-15%] left-[-10%] w-[110vw] h-[110vw] bg-zinc-500/10 rounded-2xl blur-[140px] animate-float opacity-40" />
         <div className="absolute bottom-[-15%] right-[-10%] w-[90vw] h-[90vw] bg-zinc-500/10 rounded-2xl blur-[140px] animate-float opacity-40" style={{ animationDelay: '-3s' }} />
 
-        <div className="relative z-10 flex flex-col items-center gap-12 animate-reveal">
-          <div className="relative w-28 h-28">
+        <div className="relative z-10 flex flex-col items-center gap-8 animate-reveal">
+          <div className="relative w-24 h-24">
             <div className="absolute inset-0 bg-black/10 dark:bg-white/10 blur-2xl scale-110 rounded-2xl" />
-            <div className="relative h-full w-full bg-black dark:bg-white rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.3)] flex items-center justify-center">
-               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="w-12 h-12 text-white dark:text-black">
-                 <path d="M35 65 L50 35 L65 65" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
-               </svg>
+            <div className="relative h-full w-full bg-zinc-900 dark:bg-white rounded-2xl shadow-xl flex items-center justify-center">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" className="w-12 h-12 text-white dark:text-zinc-900">
+                <path d="M35 65 L50 35 L65 65" fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </div>
           </div>
-
-          <div className="flex flex-col items-center space-y-8">
-            <h1 className="text-4xl font-extrabold tracking-tighter text-zinc-900 dark:text-white">
+          <div className="flex flex-col items-center space-y-4">
+            <h1 className="text-3xl font-extrabold tracking-tighter text-zinc-900 dark:text-white">
               SalesTrack
             </h1>
-            <div className="relative w-8 h-8">
-              {[...Array(12)].map((_, i) => (
-                <div 
-                  key={i} 
-                  className="absolute left-[14px] top-0 w-[4px] h-[10px] bg-zinc-400 dark:bg-zinc-600 rounded-full animate-ios-loader origin-[50%_16px]" 
-                  style={{ 
-                    transform: `rotate(${i * 30}deg)`,
-                    animationDelay: `${(i - 12) * 0.1}s`
-                  }} 
-                />
-              ))}
+            <div className="flex items-center gap-1.5">
+              <div className="w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-600 animate-pulse" />
+              <div className="w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-600 animate-pulse delay-150" />
+              <div className="w-2 h-2 rounded-full bg-zinc-400 dark:bg-zinc-600 animate-pulse delay-300" />
             </div>
           </div>
-        </div>
-        
-        <div className="absolute bottom-16 flex flex-col items-center gap-1">
-          <p className="text-[10px] font-bold tracking-[0.4em] uppercase text-zinc-400">
-            Powered by AI
-          </p>
-          <div className="w-12 h-[1px] bg-zinc-200 dark:bg-zinc-800" />
         </div>
       </div>
     );
@@ -130,8 +130,8 @@ const App = () => {
   if (!user) return <Auth onLogin={handleLogin} />;
 
   return (
-    <Layout 
-      activeTab={activeTab} 
+    <Layout
+      activeTab={activeTab}
       onTabChange={setActiveTab}
       user={user}
       salesData={salesData}

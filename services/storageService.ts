@@ -1,84 +1,182 @@
 import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry, AttendanceEntry, FollowUp } from '../types';
-import { db, auth } from './firebase';
+import { db, auth, logoutFirebase } from './firebase';
 import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
 
 const LS_KEYS = {
   USER: 'app_user_profile',
   THEME: 'app_theme_mode',
+  STORE_PREFIX: 'salestrack_store_',
 };
 
-const getUid = () => auth.currentUser?.uid;
-
-const getDocId = (key: string, storeName?: string) => storeName === 'users' ? key : `${getUid()}_${key}`;
-
-export const getFromStore = async <T>(storeName: string, key: string): Promise<T | undefined> => {
-  const uid = getUid();
-  if (!uid) return undefined;
+export const getUser = (): UserProfile | null => {
   try {
-    const docRef = doc(db, storeName, getDocId(key, storeName));
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return docSnap.data() as T;
-    }
-    return undefined;
-  } catch (e) {
-    console.error("getFromStore error", e);
+    const item = localStorage.getItem(LS_KEYS.USER);
+    return item ? JSON.parse(item) : null;
+  } catch {
+    return null;
+  }
+};
+
+const getUid = () => {
+  return auth.currentUser?.uid || getUser()?.uid || 'local_user';
+};
+
+const getDocId = (key: string, storeName?: string) => {
+  return storeName === 'users' ? key : `${getUid()}_${key}`;
+};
+
+// Local storage backup helpers
+const getLocalKey = (storeName: string, key: string) => `${LS_KEYS.STORE_PREFIX}${storeName}_${getUid()}_${key}`;
+const getLocalCollectionKey = (storeName: string) => `${LS_KEYS.STORE_PREFIX}${storeName}_${getUid()}_all`;
+
+const getLocalItem = <T>(storeName: string, key: string): T | undefined => {
+  try {
+    const item = localStorage.getItem(getLocalKey(storeName, key));
+    return item ? JSON.parse(item) : undefined;
+  } catch {
     return undefined;
   }
 };
 
+const setLocalItem = <T>(storeName: string, key: string, data: T): void => {
+  try {
+    localStorage.setItem(getLocalKey(storeName, key), JSON.stringify(data));
+    // Also maintain list in all
+    const all = getLocalAll<T>(storeName);
+    const idKey = (data as any)?.date || (data as any)?.id || key;
+    const existingIndex = all.findIndex((i: any) => (i?.date || i?.id || i?.uid) === idKey);
+    if (existingIndex >= 0) {
+      all[existingIndex] = data;
+    } else {
+      all.push(data);
+    }
+    localStorage.setItem(getLocalCollectionKey(storeName), JSON.stringify(all));
+  } catch (e) {
+    console.error("setLocalItem error", e);
+  }
+};
+
+const removeLocalItem = (storeName: string, key: string): void => {
+  try {
+    localStorage.removeItem(getLocalKey(storeName, key));
+    const all = getLocalAll(storeName);
+    const filtered = all.filter((i: any) => (i?.date || i?.id || i?.uid) !== key);
+    localStorage.setItem(getLocalCollectionKey(storeName), JSON.stringify(filtered));
+  } catch (e) {
+    console.error("removeLocalItem error", e);
+  }
+};
+
+const getLocalAll = <T>(storeName: string): T[] => {
+  try {
+    const item = localStorage.getItem(getLocalCollectionKey(storeName));
+    return item ? JSON.parse(item) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const getFromStore = async <T>(storeName: string, key: string): Promise<T | undefined> => {
+  const localVal = getLocalItem<T>(storeName, key);
+  const uid = auth.currentUser?.uid;
+  if (!uid) return localVal;
+
+  try {
+    const docRef = doc(db, storeName, getDocId(key, storeName));
+    const docSnap = await getDoc(docRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data() as T;
+      setLocalItem(storeName, key, data);
+      return data;
+    }
+    return localVal;
+  } catch (e) {
+    console.warn("getFromStore cloud fallback to local", e);
+    return localVal;
+  }
+};
+
 const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
-  const uid = getUid();
-  if (!uid) return [];
+  const localList = getLocalAll<T>(storeName);
+  const uid = auth.currentUser?.uid;
+  if (!uid) return localList;
+
   try {
     const q = query(collection(db, storeName), where("userId", "==", uid));
     const querySnapshot = await getDocs(q);
-    return querySnapshot.docs.map(doc => doc.data() as T);
+    if (!querySnapshot.empty) {
+      const cloudData = querySnapshot.docs.map(doc => doc.data() as T);
+      try {
+        localStorage.setItem(getLocalCollectionKey(storeName), JSON.stringify(cloudData));
+      } catch {}
+      return cloudData;
+    }
+    return localList;
   } catch (e) {
-    console.error("getAllFromStore error", e);
-    return [];
+    console.warn("getAllFromStore cloud fallback to local", e);
+    return localList;
   }
 };
 
 const putToStore = async <T>(storeName: string, key: string, data: T): Promise<void> => {
   const uid = getUid();
-  if (!uid) return;
-  try {
-    const docRef = doc(db, storeName, getDocId(key, storeName));
-    await setDoc(docRef, { ...data, userId: uid }, { merge: true });
-  } catch (e) {
-    console.error("putToStore error", e);
+  const payload = { ...data, userId: uid };
+  setLocalItem(storeName, key, payload);
+
+  if (auth.currentUser?.uid) {
+    try {
+      const docRef = doc(db, storeName, getDocId(key, storeName));
+      await setDoc(docRef, payload, { merge: true });
+    } catch (e) {
+      console.warn("putToStore cloud save failed, saved locally", e);
+    }
   }
 };
 
 const deleteFromStore = async (storeName: string, key: string): Promise<void> => {
-  const uid = getUid();
-  if (!uid) return;
-  try {
-    await deleteDoc(doc(db, storeName, getDocId(key, storeName)));
-  } catch (e) {
-    console.error("deleteFromStore error", e);
+  removeLocalItem(storeName, key);
+  if (auth.currentUser?.uid) {
+    try {
+      await deleteDoc(doc(db, storeName, getDocId(key, storeName)));
+    } catch (e) {
+      console.warn("deleteFromStore cloud delete failed", e);
+    }
   }
 };
 
-export const getUser = (): UserProfile | null => {
-  const item = localStorage.getItem(LS_KEYS.USER);
-  return item ? JSON.parse(item) : null;
-};
 export const saveUser = (user: UserProfile) => {
-  localStorage.setItem(LS_KEYS.USER, JSON.stringify(user));
-  if (user.uid) {
-    putToStore('users', user.uid, { ...user, email: auth.currentUser?.email || '' });
+  try {
+    localStorage.setItem(LS_KEYS.USER, JSON.stringify(user));
+    if (user.uid) {
+      putToStore('users', user.uid, { ...user, email: auth.currentUser?.email || user.email || '' });
+    }
+  } catch (e) {
+    console.error("saveUser error", e);
   }
 };
-import { logoutFirebase } from './firebase';
+
 export const logoutUser = async () => {
-  localStorage.removeItem(LS_KEYS.USER);
-  await logoutFirebase();
+  try {
+    localStorage.removeItem(LS_KEYS.USER);
+    await logoutFirebase();
+  } catch (e) {
+    console.error("logoutUser error", e);
+  }
 };
 
-export const getTheme = (): 'light' | 'dark' => (localStorage.getItem(LS_KEYS.THEME) as 'light' | 'dark') || 'light';
-export const saveTheme = (theme: 'light' | 'dark') => localStorage.setItem(LS_KEYS.THEME, theme);
+export const getTheme = (): 'light' | 'dark' => {
+  try {
+    return (localStorage.getItem(LS_KEYS.THEME) as 'light' | 'dark') || 'light';
+  } catch {
+    return 'light';
+  }
+};
+
+export const saveTheme = (theme: 'light' | 'dark') => {
+  try {
+    localStorage.setItem(LS_KEYS.THEME, theme);
+  } catch {}
+};
 
 export const getSalesWithoutImages = async (): Promise<DailyReport[]> => {
   return getAllFromStore<DailyReport>('sales');
@@ -115,8 +213,7 @@ export const saveSaleEntry = async (date: string, newItems: SaleItem[], newBillI
   if (existing) {
     const updatedItems = [...(existing.items || []), ...newItems];
     const { totalQty, totalValue } = calculateTotals(updatedItems);
-
-    const reportToSave = {
+    const reportToSave: DailyReport = {
       ...existing,
       items: updatedItems,
       totalQty,
@@ -124,7 +221,6 @@ export const saveSaleEntry = async (date: string, newItems: SaleItem[], newBillI
     };
     delete reportToSave.billImages;
     delete reportToSave.billImage;
-
     await putToStore('sales', date, reportToSave);
   } else {
     const { totalQty, totalValue } = calculateTotals(newItems);
@@ -232,17 +328,17 @@ export const compressImage = (file: File): Promise<string> => {
   });
 };
 
-// Mock Backup functions since we are on Firebase now
 export const exportFullBackup = async (): Promise<void> => {
-    console.log("Export backed up by Firestore now.");
+  console.log("Export backed up by Firestore and local storage.");
 };
+
 export interface BackupPackage {
   app: string;
   version: string;
   timestamp: string;
   data: any;
 }
-export const importFullBackup = async (_jsonString: string): Promise<{ success: boolean; message: string }> => {
-    return { success: false, message: 'Restore disabled in cloud mode.' };
-};
 
+export const importFullBackup = async (_jsonString: string): Promise<{ success: boolean; message: string }> => {
+  return { success: false, message: 'Restore disabled in cloud mode.' };
+};
