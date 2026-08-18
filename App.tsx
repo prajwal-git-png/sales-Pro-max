@@ -9,6 +9,8 @@ import Settings from './components/Settings';
 import Performance from './components/Performance';
 import { Tab, UserProfile, DailyReport } from './types';
 import { getUser, logoutUser, getSalesWithoutImages, getTheme, saveTheme } from './services/storageService';
+import { auth } from './services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const App = () => {
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -29,12 +31,29 @@ const App = () => {
       const storedUser = getUser();
       if (storedUser) {
         setUser(storedUser);
-        const storedSales = await getSalesWithoutImages();
-        setSalesData(storedSales);
       }
       
+      onAuthStateChanged(auth, async (firebaseUser) => {
+        if (firebaseUser) {
+          const { getFromStore } = await import('./services/storageService');
+          const profile = await getFromStore<UserProfile>('users', firebaseUser.uid);
+          if (profile) {
+             const fullUser = { ...profile, uid: firebaseUser.uid };
+             setUser(fullUser);
+             saveUser(fullUser);
+          }
+          const storedSales = await getSalesWithoutImages();
+          setSalesData(storedSales);
+          setIsLoading(false);
+        } else {
+          logoutUser();
+          setUser(null);
+          setIsLoading(false);
+        }
+      });
+      
       // Sophisticated splash timeout
-      setTimeout(() => setIsLoading(false), 2600);
+      // setTimeout removed
     };
 
     initApp();

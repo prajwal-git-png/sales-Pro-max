@@ -23,7 +23,7 @@ export interface ExtractedBillData {
 }
 
 export const extractDataFromBill = async (base64Image: string, user: UserProfile): Promise<ExtractedBillData> => {
-    const apiKey = user.apiKey || process.env.GEMINI_API_KEY;
+    const apiKey = user.apiKey || process.env.API_KEY;
     if (!apiKey) {
         throw new Error("API Key not found. Please add your Gemini API Key in Settings.");
     }
@@ -34,7 +34,7 @@ export const extractDataFromBill = async (base64Image: string, user: UserProfile
     const base64Data = base64Image.split(',')[1] || base64Image;
 
     const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-pro-preview",
         contents: [
             {
                 role: "user",
@@ -114,12 +114,12 @@ export const getMotivationalQuote = async (apiKey?: string): Promise<string> => 
 };
 
 export const sendCoachMessage = async (user: UserProfile, sales: DailyReport[], history: ChatMessage[], message: string): Promise<string> => {
-    const apiKey = user.apiKey || process.env.GEMINI_API_KEY;
+    const apiKey = user.apiKey || process.env.API_KEY;
     if (!apiKey) throw new Error("API_KEY_MISSING");
 
     const ai = new GoogleGenAI({ apiKey });
     const chat = ai.chats.create({
-        model: "gemini-3-flash-preview",
+        model: "gemini-3.1-pro-preview",
         config: {
             systemInstruction: `You are a Bajaj Sales Coach for ${user.name} at ${user.storeName}. 
             Your goal is to help them sell more Bajaj products. 

@@ -26,6 +26,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   const [isWeekOff, setIsWeekOff] = useState(false);
   const [activeSearchIndex, setActiveSearchIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
   
   // Optional Entry Details
   const [customerPhone, setCustomerPhone] = useState('');
@@ -34,7 +35,11 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   const [notes, setNotes] = useState('');
 
   const filteredProducts = searchTerm 
-      ? PRODUCT_LIST.filter(p => p.toLowerCase().includes(searchTerm.toLowerCase()))
+      ? PRODUCT_LIST.filter(p => {
+          const searchWords = searchTerm.toLowerCase().split(' ').filter(Boolean);
+          const productLower = p.toLowerCase();
+          return searchWords.every(word => productLower.includes(word));
+        })
       : PRODUCT_LIST;
 
   const addItem = () => {
@@ -160,6 +165,15 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErrorMsg('');
+    
+    if (!isWeekOff) {
+        const invalidItems = items.some(i => !i.productName.trim() || i.quantity <= 0 || i.price < 0);
+        if (invalidItems) {
+            setErrorMsg('Please complete all product entries correctly. Product name cannot be empty, quantity must be > 0, and price >= 0.');
+            return;
+        }
+    }
     
     if (isWeekOff) {
         setIsSubmitting(true);
@@ -444,6 +458,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
         </div>
         )}
 
+        {errorMsg && <p className="text-red-500 text-sm font-bold text-center mt-4 bg-red-100/50 p-2 rounded-xl">{errorMsg}</p>}
         <GlassButton type="submit" className="w-full py-4 text-lg shadow-xl shadow-blue-500/20 rounded-3xl" disabled={isSubmitting}>
             {isSubmitting ? 'Saving...' : (isWeekOff ? 'Confirm Week Off' : 'Save Entry')}
         </GlassButton>

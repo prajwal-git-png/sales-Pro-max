@@ -62,6 +62,8 @@ export const MR_PRODUCTS = [
   { category: 'STEAM IRON', rdArticle: '491186080', description: 'MR STEAM IRON ULTRA GLIDE 1500W' },
   { category: 'STEAM IRON', rdArticle: '491186083', description: 'MR STEAM IRON ULTRA GLIDE 2000W' },
   { category: 'OTG', rdArticle: '494343664', description: 'MR OTG 29 RCAP DIGI' },
+  { category: 'OTG', rdArticle: 'N/A', description: 'MR OTG 60 RCSS B' },
+  { category: 'OTG', rdArticle: 'N/A', description: 'MR OTG 60L' },
   { category: 'OTG', rdArticle: '492861834', description: 'MORPHY RICHARDS OTG 52 RSS B DIGICHEF 35L' },
   { category: 'OTG', rdArticle: '494343634', description: 'MORPHY RICHARDS OTG 52 RSS B DIGICHEF 35L' },
   { category: 'MWO', rdArticle: '491932215', description: 'MORPHY RICHARDS MWO 20MS SOLO 20L' },

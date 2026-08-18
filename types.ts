@@ -9,6 +9,7 @@ export interface SaleItem {
 }
 
 export interface DailyReport {
+  userId?: string;
   date: string; // ISO format YYYY-MM-DD
   items: SaleItem[];
   totalValue: number;
@@ -21,6 +22,7 @@ export interface DailyReport {
 }
 
 export interface StoreEODEntry {
+  userId?: string;
   date: string;
   achievement: number;
   eolAchieve: number;
@@ -36,6 +38,7 @@ export interface StoreLocation {
 }
 
 export interface AttendanceEntry {
+  userId?: string;
   date: string; // YYYY-MM-DD
   status: 'Present' | 'Week Off' | 'Leave';
   checkInTime?: string;
@@ -43,6 +46,8 @@ export interface AttendanceEntry {
 }
 
 export interface UserProfile {
+  uid?: string;
+  userId?: string;
   name: string;
   employeeId: string;
   phoneNumber: string;
@@ -73,6 +78,7 @@ export interface ComplaintTimelineEvent {
 }
 
 export interface Complaint {
+  userId?: string;
   id: string;
   customerName: string;
   phoneNumber: string;
@@ -89,6 +95,7 @@ export interface Complaint {
 }
 
 export interface FollowUp {
+  userId?: string;
   id: string;
   customerName: string;
   phoneNumber: string;
