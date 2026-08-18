@@ -8,7 +8,7 @@ import CRM from './components/CRM';
 import Settings from './components/Settings';
 import Performance from './components/Performance';
 import { Tab, UserProfile, DailyReport } from './types';
-import { getUser, logoutUser, getSalesWithoutImages, getTheme, saveTheme, saveUser } from './services/storageService';
+import { getUser, logoutUser, getSalesWithoutImages, getTheme, saveTheme, ensureUserProfileFromGoogle } from './services/storageService';
 import { auth } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
@@ -28,7 +28,7 @@ const App = () => {
         document.documentElement.classList.add('dark');
       }
 
-      // 1. Immediately check local storage
+      // 1. Check local cached user first for instant rendering
       const storedUser = getUser();
       if (storedUser) {
         setUser(storedUser);
@@ -46,12 +46,9 @@ const App = () => {
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
         if (firebaseUser) {
           try {
-            const { getFromStore } = await import('./services/storageService');
-            const profile = await getFromStore<UserProfile>('users', firebaseUser.uid);
+            const profile = await ensureUserProfileFromGoogle(firebaseUser);
             if (profile) {
-              const fullUser = { ...profile, uid: firebaseUser.uid };
-              setUser(fullUser);
-              saveUser(fullUser);
+              setUser(profile);
             }
           } catch (err) {
             console.warn("Error fetching cloud profile:", err);
