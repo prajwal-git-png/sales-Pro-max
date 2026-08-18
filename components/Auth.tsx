@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { getRedirectResult, onAuthStateChanged } from 'firebase/auth';
+import { auth } from '../services/firebase';
 import { GlassCard, GlassInput, GlassButton } from './ui/GlassComponents';
 import { UserProfile } from '../types';
 import { saveUser, getFromStore } from '../services/storageService';
@@ -23,21 +25,57 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
   });
 
   
+  useEffect(() => {
+    let mounted = true;
+    const initAuth = async () => {
+      try {
+        setIsCheckingProfile(true);
+        // 1. Check if we just came back from a redirect
+        const result = await getRedirectResult(auth);
+        let user = result?.user || null;
+        
+        // 2. If no redirect result, check current auth state
+        if (!user) {
+          user = auth.currentUser;
+        }
+        
+        if (user && mounted) {
+          setGoogleUser(user);
+          const profile = await getFromStore<UserProfile>('users', user.uid);
+          if (profile) {
+            onLogin({ ...profile, uid: user.uid });
+          } else {
+            setFormData(prev => ({ ...prev, name: user?.displayName || '' }));
+            setIsCheckingProfile(false);
+          }
+        } else if (mounted) {
+           setIsCheckingProfile(false);
+        }
+      } catch (error) {
+        console.error("Auth init failed", error);
+        if (mounted) setIsCheckingProfile(false);
+      }
+    };
+    
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+       if (user && !googleUser) {
+          initAuth();
+       } else if (!user && mounted) {
+          setIsCheckingProfile(false);
+       }
+    });
+
+    initAuth();
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
+
   const handleGoogleSignIn = async () => {
     try {
       setIsCheckingProfile(true);
-      const result = await loginWithGoogle();
-      const user = result.user;
-      setGoogleUser(user);
-      
-      // Check if profile exists
-      const profile = await getFromStore<UserProfile>('users', user.uid);
-      if (profile) {
-        onLogin({ ...profile, uid: user.uid });
-      } else {
-        setFormData(prev => ({ ...prev, name: user.displayName || '' }));
-        setIsCheckingProfile(false);
-      }
+      await loginWithGoogle(); // This now does signInWithRedirect
     } catch (error) {
       console.error("Google Sign-in failed", error);
       setIsCheckingProfile(false);

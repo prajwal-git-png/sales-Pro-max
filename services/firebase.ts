@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDocFromServer } from 'firebase/firestore';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
 
 const firebaseConfig = {
   projectId: "gen-lang-client-0662492374",
@@ -16,7 +16,8 @@ export const db = getFirestore(app, "ai-studio-copyofsalestrack-0dde2e81-565f-4d
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
-export const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
+export const loginWithGoogle = () => signInWithRedirect(auth, googleProvider);
+export const loginWithGooglePopup = () => signInWithPopup(auth, googleProvider);
 export const logoutFirebase = () => signOut(auth);
 
 export const testConnection = async () => {
