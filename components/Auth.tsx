@@ -27,11 +27,14 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
   
   useEffect(() => {
     let mounted = true;
-    const initAuth = async () => {
+        const initAuth = async () => {
       try {
-        setIsCheckingProfile(true);
         // 1. Check if we just came back from a redirect
-        const result = await getRedirectResult(auth);
+        const result = await Promise.race([
+            getRedirectResult(auth),
+            new Promise((resolve) => setTimeout(() => resolve(null), 3000)) // 3s timeout
+        ]).catch(() => null) as any;
+        
         let user = result?.user || null;
         
         // 2. If no redirect result, check current auth state
@@ -71,6 +74,28 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
       unsubscribe();
     };
   }, []);
+
+  const handlePopupSignIn = async () => {
+    try {
+      setIsCheckingProfile(true);
+      const { loginWithGooglePopup } = await import('../services/firebase');
+      const result = await loginWithGooglePopup();
+      let user = result?.user;
+      if (user) {
+        setGoogleUser(user);
+        const profile = await getFromStore('users', user.uid);
+        if (profile) {
+          onLogin({ ...profile, uid: user.uid } as UserProfile);
+        } else {
+          setFormData(prev => ({ ...prev, name: user?.displayName || '' }));
+          setIsCheckingProfile(false);
+        }
+      }
+    } catch (error) {
+      console.error("Popup Sign-in failed", error);
+      setIsCheckingProfile(false);
+    }
+  };
 
   const handleGoogleSignIn = async () => {
     try {
@@ -141,7 +166,7 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
           <p className="text-zinc-500 dark:text-zinc-400">Welcome back, Executive.</p>
         </div>
 
-        {!googleUser ? (
+                {!googleUser ? (
           <div className="flex flex-col gap-4">
             <GlassButton onClick={handleGoogleSignIn} disabled={isCheckingProfile} className="w-full rounded-3xl py-4 flex items-center justify-center gap-2 bg-white dark:bg-white/10 text-zinc-800 dark:text-white border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 dark:hover:bg-white/20">
               <svg className="w-5 h-5" viewBox="0 0 24 24">
@@ -152,6 +177,13 @@ const Auth = ({ onLogin }: { onLogin: (user: UserProfile) => void }) => {
               </svg>
               {isCheckingProfile ? "Checking..." : "Sign in with Google"}
             </GlassButton>
+            <button 
+              onClick={handlePopupSignIn} 
+              disabled={isCheckingProfile}
+              className="text-xs text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300 underline underline-offset-2"
+            >
+              Alternative Sign in (Popup)
+            </button>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
