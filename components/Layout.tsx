@@ -42,7 +42,8 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
 
   useEffect(() => {
     if (showCoach && messages.length === 0 && user) {
-        setMessages([{ role: 'model', text: `Hi ${user.name.split(' ')[0]}! I'm your Bajaj Sales Coach. How's the market today? 🚀` }]);
+        const firstName = (user.name || 'Executive').split(' ')[0] || 'Executive';
+        setMessages([{ role: 'model', text: `Hi ${firstName}! I'm your Bajaj Sales Coach. How's the market today? 🚀` }]);
     }
   }, [showCoach, user]);
 
@@ -127,16 +128,16 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
             ) : (
                 <div className="flex flex-col items-center text-center space-y-4 animate-in fade-in zoom-in duration-300 w-full">
                     <div className="flex items-center gap-3 w-full px-2">
-                        {user.avatar ? (
+                        {user?.avatar ? (
                             <img src={user.avatar} className="w-10 h-10 rounded-full object-cover border border-white/20" />
                         ) : (
                             <div className="w-10 h-10 rounded-full bg-zinc-800 flex items-center justify-center text-sm font-bold">
-                                {user.name.charAt(0)}
+                                {(user?.name || 'U').charAt(0)}
                             </div>
                         )}
                         <div className="text-left flex-1">
-                            <p className="text-sm font-bold">{user.name}</p>
-                            <p className="text-[10px] text-zinc-400">{user.storeName}</p>
+                            <p className="text-sm font-bold">{user?.name || 'Executive'}</p>
+                            <p className="text-[10px] text-zinc-400">{user?.storeName || 'Store'}</p>
                         </div>
                         <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_rgba(34,197,94,0.8)]" />
                     </div>

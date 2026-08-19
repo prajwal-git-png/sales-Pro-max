@@ -22,15 +22,25 @@
     <script type="module" src="/index.tsx"></script>
     <script>
       if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js')
-            .then(reg => {
-              console.log('SalesTrack Service Worker registered with scope:', reg.scope);
-            })
-            .catch(err => {
-              console.log('Service Worker registration warning:', err);
-            });
-        });
+        // If in preview iframe, clear any old service workers to avoid stale cache blocking
+        if (window.self !== window.top) {
+          navigator.serviceWorker.getRegistrations().then(registrations => {
+            for (const r of registrations) {
+              r.unregister().catch(() => {});
+            }
+          }).catch(() => {});
+        } else {
+          window.addEventListener('load', () => {
+            navigator.serviceWorker.register('/sw.js')
+              .then(reg => {
+                // Ensure update is checked
+                reg.update().catch(() => {});
+              })
+              .catch(err => {
+                console.log('Service Worker registration note:', err);
+              });
+          });
+        }
       }
     </script>
   </body>

@@ -192,7 +192,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
               <path d="M35 65 L50 35 L65 65" fill="none" stroke="currentColor" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
-          <h1 className="text-3xl font-black tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-400 dark:to-indigo-300">
+          <h1 className="text-3xl font-black tracking-tight text-[#000000]">
             SalesTrack
           </h1>
           <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Welcome back, Executive.</p>

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'salestrack-v4';
+const CACHE_NAME = 'salestrack-v5';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -10,18 +10,7 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then(async (cache) => {
-      // Add assets individually so one failure does not break the entire install
-      await Promise.all(
-        STATIC_ASSETS.map((asset) => 
-          cache.add(asset).catch((err) => {
-            console.warn('SW pre-cache skip for:', asset, err);
-          })
-        )
-      );
-    })
-  );
+  // Activate immediately
   self.skipWaiting();
 });
 
@@ -31,42 +20,54 @@ self.addEventListener('activate', (event) => {
       return Promise.all(
         keys.map((key) => {
           if (key !== CACHE_NAME) {
+            console.log('Purging legacy cache:', key);
             return caches.delete(key);
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 self.addEventListener('fetch', (event) => {
-  // Only handle GET requests
+  // Only intercept GET requests
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
 
-  // Do not intercept API requests or internal Vite dev server modules
+  // Strictly skip API routes, Vite dev server internals, TypeScript/JSX sources, and dev assets
   if (
     url.pathname.startsWith('/api/') ||
     url.pathname.startsWith('/@') ||
     url.pathname.includes('node_modules') ||
+    url.pathname.endsWith('.tsx') ||
+    url.pathname.endsWith('.ts') ||
+    url.pathname.endsWith('.css') ||
     url.search.includes('import') ||
     url.search.includes('t=')
   ) {
     return;
   }
 
-  // Only handle same-origin or google fonts
-  if (url.origin !== self.location.origin && !url.origin.includes('fonts.gstatic.com') && !url.origin.includes('fonts.googleapis.com')) {
+  // Cross-origin checks: only handle same-origin or Google Fonts
+  if (
+    url.origin !== self.location.origin &&
+    !url.origin.includes('fonts.gstatic.com') &&
+    !url.origin.includes('fonts.googleapis.com')
+  ) {
     return;
   }
 
-  // Network First Strategy with Cache Fallback
+  // Network-First with fallback for offline navigation
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+        if (
+          networkResponse &&
+          networkResponse.status === 200 &&
+          networkResponse.type === 'basic' &&
+          !url.pathname.startsWith('/@')
+        ) {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseToCache).catch(() => {});
@@ -82,8 +83,8 @@ self.addEventListener('fetch', (event) => {
           if (event.request.mode === 'navigate') {
             return caches.match('/index.html') || caches.match('/');
           }
-          return new Response('Network error occurred', {
-            status: 408,
+          return new Response('Offline - network request failed', {
+            status: 503,
             headers: { 'Content-Type': 'text/plain' }
           });
         });

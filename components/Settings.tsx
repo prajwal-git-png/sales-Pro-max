@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon, FileSpreadsheet, Smartphone } from 'lucide-react';
+import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon, FileSpreadsheet, Smartphone, Key } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile, StoreLocation } from '../types';
@@ -335,6 +335,16 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
                     <label className="text-[10px] font-bold text-zinc-400 uppercase">Weekly Goal (₹)</label>
                     <GlassInput type="number" value={editForm.customTargets?.weekly || 0} onChange={e => setEditForm({...editForm, customTargets: { ...editForm.customTargets!, weekly: parseInt(e.target.value) || 0 }})} className="rounded-3xl" />
                 </div>
+            </div>
+        </GlassCard>
+
+        {/* AI Configuration */}
+        <h3 className="font-bold text-lg px-2 flex items-center gap-2"><Key size={18} className="text-purple-500" /> AI Features</h3>
+        <GlassCard className="p-5 space-y-4 rounded-3xl">
+            <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase">Gemini API Key</label>
+                <GlassInput type="password" placeholder="AI Studio Gemini API Key" value={editForm.apiKey || ''} onChange={e => setEditForm({...editForm, apiKey: e.target.value})} className="rounded-3xl" />
+                <p className="text-[10px] text-zinc-500 mt-1">Required for automated bill extraction and AI coach insights.</p>
             </div>
         </GlassCard>
 

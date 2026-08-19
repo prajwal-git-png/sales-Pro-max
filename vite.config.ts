@@ -19,7 +19,7 @@ export default defineConfig(({ mode }) => {
   const apiKey = rawKey.trim();
 
   return {
-    base: './', // Ensure relative paths for assets in preview/production
+    base: '/',
     plugins: [
       react(),
       tailwindcss(),
