@@ -86,6 +86,14 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
     }
   };
 
+  const salesMap = useMemo(() => {
+    const map = new Map<string, DailyReport>();
+    sales.forEach(s => {
+      if (s.date) map.set(s.date, s);
+    });
+    return map;
+  }, [sales]);
+
   const calendarDays = useMemo(() => {
     const now = currentMonth;
     const year = now.getFullYear();
@@ -295,7 +303,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
           <div className="grid grid-cols-7 gap-3">
             {calendarDays.map((d, i) => {
               if (!d) return <div key={i} />;
-              const report = sales.find(s => s.date === d.dateStr);
+              const report = salesMap.get(d.dateStr);
               const isToday = d.dateStr === new Date().toISOString().split('T')[0];
               const isWeekOff = report?.isWeekOff;
               return (

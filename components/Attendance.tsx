@@ -146,6 +146,12 @@ ${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
     return days;
   }, [currentMonth]);
 
+  const attendanceHistoryMap = useMemo(() => {
+    const map = new Map<string, AttendanceEntry>();
+    attendanceHistory.forEach(e => map.set(e.date, e));
+    return map;
+  }, [attendanceHistory]);
+
   const RecenterMap = ({ lat, lng }: { lat: number, lng: number }) => {
     const map = useMap();
     useEffect(() => {
@@ -229,9 +235,9 @@ ${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
         <div className="flex items-center justify-between mb-6">
             <h3 className="font-bold text-lg">Attendance Calendar</h3>
             <div className="flex items-center gap-3 bg-zinc-100 dark:bg-zinc-800 px-3 py-1 rounded-3xl">
-                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()-1)))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-full transition-colors"><ChevronLeft size={16} /></button>
+                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-full transition-colors"><ChevronLeft size={16} /></button>
                 <span className="text-xs font-bold uppercase tracking-widest">{currentMonth.toLocaleString('default', { month: 'short', year: 'numeric' })}</span>
-                <button onClick={() => setCurrentMonth(new Date(currentMonth.setMonth(currentMonth.getMonth()+1)))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-full transition-colors"><ChevronRight size={16} /></button>
+                <button onClick={() => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1))} className="p-1 hover:bg-white dark:hover:bg-zinc-700 rounded-full transition-colors"><ChevronRight size={16} /></button>
             </div>
         </div>
         <div className="grid grid-cols-7 gap-2 mb-4">
@@ -240,7 +246,7 @@ ${status === 'Present' ? 'I am in the store sir...' : `Status: ${status}`}`;
         <div className="grid grid-cols-7 gap-2">
             {calendarDays.map((d, i) => {
                 if (!d) return <div key={i} />;
-                const entry = attendanceHistory.find(e => e.date === d.dateStr);
+                const entry = attendanceHistoryMap.get(d.dateStr);
                 let bgClass = 'bg-zinc-50 dark:bg-zinc-900/30';
                 let borderClass = 'border-transparent';
                 let textClass = 'text-zinc-400';
