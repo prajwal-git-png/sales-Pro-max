@@ -1,9 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { GlassCard, GlassInput, GlassButton } from './ui/GlassComponents';
 import { UserProfile } from '../types';
-import { saveUser, ensureUserProfileFromGoogle } from '../services/storageService';
-import { loginWithGooglePopup, loginWithGoogleRedirect, checkRedirectResult, auth } from '../services/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { saveUser } from '../services/storageService';
 import { AlertCircle, RefreshCw, Smartphone, Download, ExternalLink } from 'lucide-react';
 import { usePWAInstall, InstallModal } from './InstallPWA';
 
@@ -26,50 +24,11 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     storeName: '',
   });
 
-  const [googleLoading, setGoogleLoading] = useState(false);
-  const [authNotice, setAuthNotice] = useState('');
-  const [googleUser, setGoogleUser] = useState<any>(null);
-
+      
   const { isInstallable, isInstalled, isInIframe, triggerInstall } = usePWAInstall();
   const [showInstallModal, setShowInstallModal] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-
-    // Check if returning from a redirect
-    checkRedirectResult()
-      .then(async (result) => {
-        if (result && result.user && mounted) {
-          setGoogleLoading(true);
-          const profile = await ensureUserProfileFromGoogle(result.user);
-          if (mounted) onLogin(profile);
-        }
-      })
-      .catch((err) => {
-        console.warn('Redirect sign-in notice:', err);
-      });
-
-    // Check auth state listener
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user && mounted) {
-        setGoogleUser(user);
-        try {
-          const profile = await ensureUserProfileFromGoogle(user);
-          if (mounted && profile) {
-            onLogin(profile);
-          }
-        } catch (e) {
-          console.warn('Auth state profile sync:', e);
-        }
-      }
-    });
-
-    return () => {
-      mounted = false;
-      unsubscribe();
-    };
-  }, [onLogin]);
-
+  
   const validate = () => {
     let isValid = true;
     const newErrors = { name: '', employeeId: '', phoneNumber: '', storeName: '' };
@@ -102,41 +61,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
     return isValid;
   };
 
-  const handleGoogleSignIn = async () => {
-    setAuthNotice('');
-    setGoogleLoading(true);
-
-    try {
-      const result = await loginWithGooglePopup();
-      if (result && result.user) {
-        setGoogleUser(result.user);
-        const profile = await ensureUserProfileFromGoogle(result.user);
-        onLogin(profile);
-      }
-    } catch (err: any) {
-      console.warn('Google sign-in exception:', err);
-      const code = err?.code || '';
-
-      if (code === 'auth/unauthorized-domain') {
-        const domain = typeof window !== 'undefined' ? window.location.hostname : 'custom domain';
-        setAuthNotice(`Notice: "${domain}" needs to be authorized in Firebase Console. You can enter details below to sign in directly.`);
-      } else if (code === 'auth/popup-closed-by-user' || code === 'auth/user-cancelled') {
-        setAuthNotice('Google sign-in was cancelled. You can retry or fill details below.');
-      } else if (code === 'auth/popup-blocked') {
-        try {
-          await loginWithGoogleRedirect();
-          return;
-        } catch {
-          setAuthNotice('Popup was blocked by your browser. Please enter details below.');
-        }
-      } else {
-        setAuthNotice('Google sign-in temporary notice. You can enter details below.');
-      }
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
-
+  
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -144,7 +69,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
     const rawPhone = formData.phoneNumber.replace(/[\s-]/g, '');
     const cleanName = formData.name.trim().toUpperCase();
-    const customId = googleUser?.uid || `exec_${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString().slice(-4)}`;
+    const customId = `exec_${cleanName.toLowerCase().replace(/[^a-z0-9]/g, '_')}_${Date.now().toString().slice(-4)}`;
 
     const user: UserProfile = {
       uid: customId,
@@ -153,7 +78,7 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       employeeId: formData.employeeId.trim().toUpperCase(),
       phoneNumber: rawPhone,
       storeName: formData.storeName.trim().toUpperCase(),
-      email: googleUser?.email || `${cleanName.toLowerCase().replace(/\s+/g, '.')}@salestrack.app`,
+      email: `${cleanName.toLowerCase().replace(/\s+/g, '.')}@salestrack.app`,
       monthlyTarget: 100000,
     };
 
@@ -196,46 +121,6 @@ export const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             SalesTrack
           </h1>
           <p className="text-zinc-500 dark:text-zinc-400 text-sm mt-1">Welcome back, Executive.</p>
-        </div>
-
-        {/* Google Sign-in Option */}
-        <div className="space-y-3 mb-6">
-          <button
-            type="button"
-            disabled={googleLoading}
-            onClick={handleGoogleSignIn}
-            className="w-full py-3.5 px-5 rounded-2xl font-semibold text-sm bg-white dark:bg-zinc-800/80 hover:bg-zinc-50 dark:hover:bg-zinc-800 text-zinc-800 dark:text-white border border-zinc-200 dark:border-zinc-700/80 shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-          >
-            {googleLoading ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
-                <span>Signing in with Google...</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.17z" />
-                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.34 24 12 24z" />
-                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.13-1.55.38-2.27V6.58H1.25C.45 8.17 0 9.97 0 12s.45 3.83 1.25 5.42l4.03-3.15z" />
-                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.34 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
-                </svg>
-                <span>Continue with Google</span>
-              </>
-            )}
-          </button>
-
-          {authNotice && (
-            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-left flex items-start gap-2">
-              <AlertCircle size={14} className="text-amber-500 shrink-0 mt-0.5" />
-              <p className="text-[11px] text-amber-700 dark:text-amber-300 leading-tight">{authNotice}</p>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3 mb-5">
-          <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-800" />
-          <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">or enter details</span>
-          <div className="flex-1 h-px bg-zinc-200 dark:bg-zinc-800" />
         </div>
 
         {/* Executive Profile Form */}

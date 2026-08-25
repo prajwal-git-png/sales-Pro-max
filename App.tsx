@@ -8,9 +8,7 @@ import CRM from './components/CRM';
 import Settings from './components/Settings';
 import Performance from './components/Performance';
 import { Tab, UserProfile, DailyReport } from './types';
-import { getUser, logoutUser, getSalesWithoutImages, getTheme, saveTheme, ensureUserProfileFromGoogle } from './services/storageService';
-import { auth } from './services/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { getUser, logoutUser, getSalesWithoutImages, getTheme, saveTheme, } from './services/storageService';
 
 const App = () => {
   const [user, setUser] = useState<UserProfile | null>(() => {
@@ -49,25 +47,7 @@ const App = () => {
     // 1. Initial load of sales data
     refreshData();
 
-    // 2. Listen to Firebase Auth state for cloud sync
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        try {
-          const profile = await ensureUserProfileFromGoogle(firebaseUser);
-          if (profile) {
-            setUser(profile);
-          }
-        } catch (err) {
-          console.warn("Error fetching cloud profile:", err);
-        }
-        await refreshData();
-      }
-    });
-
-    return () => {
-      unsubscribe();
-    };
-  }, []);
+      }, []);
 
   const toggleTheme = () => {
     const newMode = !isDark;

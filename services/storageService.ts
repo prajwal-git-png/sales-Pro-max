@@ -1,7 +1,4 @@
 import { DailyReport, UserProfile, Complaint, SaleItem, StoreEODEntry, AttendanceEntry, FollowUp } from '../types';
-import { db, auth, logoutFirebase } from './firebase';
-import { collection, doc, setDoc, getDoc, getDocs, query, where, deleteDoc } from 'firebase/firestore';
-import { User } from 'firebase/auth';
 import { 
   idbSaveImages, 
   idbGetImages, 
@@ -31,7 +28,7 @@ export const getUser = (): UserProfile | null => {
 };
 
 const getUid = (): string => {
-  return auth.currentUser?.uid || getUser()?.uid || getUser()?.userId || 'default_user';
+  return getUser()?.uid || getUser()?.userId || 'default_user';
 };
 
 const getDocId = (key: string, storeName?: string) => {
@@ -174,9 +171,14 @@ const getLocalAll = <T>(storeName: string): T[] => {
     }
 
     // 2. Scan ALL localStorage keys matching this storeName to catch legacy or previous-UID data
+    const activeUid = getUid();
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (!k) continue;
+
+      // Only merge if it belongs to current active UID OR the legacy 'default_user' (unregistered)
+      const isCurrentOrLegacy = k.includes(`_${activeUid}_`) || k.includes(`_default_user_`);
+      if (!isCurrentOrLegacy) continue;
 
       if (k.startsWith(`${LS_KEYS.STORE_PREFIX}${storeName}_`) && k.endsWith('_all') && k !== primaryKey) {
         try {
@@ -237,45 +239,20 @@ export const getFromStore = async <T>(storeName: string, key: string): Promise<T
     let localVal: T | undefined = idbRecord ? ({ date: idbRecord.date, images: idbRecord.images, userId: idbRecord.userId } as T) : undefined;
     
     // 2. Check Cloud
-    const uid = auth.currentUser?.uid;
-    if (uid) {
-      try {
-        const docRef = doc(db, storeName, docId);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const cloudData = docSnap.data() as T;
-          const images = (cloudData as any)?.images || [];
-          await idbSaveImages(docId, normKey, images, uid);
-          return cloudData;
-        }
-      } catch (e) {
-        console.warn("getFromStore images cloud fetch warn", e);
-      }
-    }
+    const uid = null;
+    
     return localVal;
   }
 
   const localVal = getLocalItem<T>(storeName, normKey);
-  const uid = auth.currentUser?.uid;
+  const uid = null;
   if (!uid) return localVal;
 
-  try {
-    const docRef = doc(db, storeName, getDocId(normKey, storeName));
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      const data = docSnap.data() as T;
-      setLocalItem(storeName, normKey, data);
-      return data;
-    }
-    return localVal;
-  } catch (e) {
-    console.warn("getFromStore fallback to local cache", e);
-    return localVal;
-  }
+  
 };
 
 export const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
-  const uid = auth.currentUser?.uid;
+  const uid = null;
 
   if (storeName === 'images') {
     const idbList = await idbGetAllImages();
@@ -284,22 +261,7 @@ export const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
       map.set(r.date, { date: r.date, images: r.images, userId: r.userId });
     });
 
-    if (uid) {
-      try {
-        const q = query(collection(db, storeName), where("userId", "==", uid));
-        const querySnapshot = await getDocs(q);
-        querySnapshot.docs.forEach(docSnap => {
-          const item = docSnap.data() as any;
-          if (item?.date) {
-            const norm = normalizeDateString(item.date);
-            map.set(norm, { ...item, date: norm });
-            idbSaveImages(getDocId(norm, storeName), norm, item.images || [], uid);
-          }
-        });
-      } catch (e) {
-        console.warn("getAllFromStore images cloud warning", e);
-      }
-    }
+    
 
     return Array.from(map.values()) as T[];
   }
@@ -307,40 +269,7 @@ export const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
   const localList = getLocalAll<T>(storeName);
   if (!uid) return localList;
 
-  try {
-    const q = query(collection(db, storeName), where("userId", "==", uid));
-    const querySnapshot = await getDocs(q);
-    
-    // Merge cloud data and local data seamlessly
-    const mergedMap = new Map<string, T>();
-
-    // First insert all local items
-    localList.forEach((item: any) => {
-      const k = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid || JSON.stringify(item));
-      if (item?.date) item.date = k;
-      mergedMap.set(k, item);
-    });
-
-    // Merge cloud items
-    if (!querySnapshot.empty) {
-      querySnapshot.docs.forEach(docSnap => {
-        const item = docSnap.data() as any;
-        const k = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid || docSnap.id);
-        if (item?.date) item.date = k;
-        mergedMap.set(k, item as T);
-      });
-    }
-
-    const merged = Array.from(mergedMap.values());
-    try {
-      localStorage.setItem(getLocalCollectionKey(storeName), JSON.stringify(merged));
-    } catch {}
-
-    return merged;
-  } catch (e) {
-    console.warn("getAllFromStore fallback to local cache", e);
-    return localList;
-  }
+  
 };
 
 export const putToStore = async <T>(storeName: string, key: string, data: T): Promise<void> => {
@@ -357,14 +286,7 @@ export const putToStore = async <T>(storeName: string, key: string, data: T): Pr
     setLocalItem(storeName, normKey, payload);
   }
 
-  if (auth.currentUser?.uid) {
-    try {
-      const docRef = doc(db, storeName, docId);
-      await setDoc(docRef, payload, { merge: true });
-    } catch (e) {
-      console.warn("putToStore cloud write warning", e);
-    }
-  }
+  
 };
 
 export const deleteFromStore = async (storeName: string, key: string): Promise<void> => {
@@ -378,87 +300,26 @@ export const deleteFromStore = async (storeName: string, key: string): Promise<v
     removeLocalItem(storeName, normKey);
   }
 
-  if (auth.currentUser?.uid) {
-    try {
-      await deleteDoc(doc(db, storeName, docId));
-    } catch (e) {
-      console.warn("deleteFromStore cloud delete warning", e);
-    }
-  }
+  
 };
 
 export const saveUser = async (user: UserProfile) => {
   try {
-    const activeUid = auth.currentUser?.uid || user.uid || user.userId || getUid();
+    const activeUid = user.uid || user.userId || getUid();
     const profileToSave = { ...user, uid: activeUid, userId: activeUid };
     localStorage.setItem(LS_KEYS.USER, JSON.stringify(profileToSave));
 
-    if (auth.currentUser?.uid) {
-      const userDocRef = doc(db, 'users', auth.currentUser.uid);
-      await setDoc(userDocRef, { 
-        ...profileToSave, 
-        userId: auth.currentUser.uid,
-        email: auth.currentUser.email || user.email || '' 
-      }, { merge: true });
-    }
+    
   } catch (e) {
     console.error("saveUser error", e);
   }
 };
 
-export const ensureUserProfileFromGoogle = async (firebaseUser: User): Promise<UserProfile> => {
-  try {
-    // 1. Try to load from Firestore
-    const userDocRef = doc(db, 'users', firebaseUser.uid);
-    const docSnap = await getDoc(userDocRef);
-    if (docSnap.exists()) {
-      const cloudProfile = docSnap.data() as UserProfile;
-      const fullProfile = { ...cloudProfile, uid: firebaseUser.uid, userId: firebaseUser.uid };
-      localStorage.setItem(LS_KEYS.USER, JSON.stringify(fullProfile));
-      return fullProfile;
-    }
-  } catch (e) {
-    console.warn("Could not fetch remote user profile, using Google defaults", e);
-  }
-
-  // 2. Try from local storage
-  const existingLocal = getUser();
-  if (existingLocal) {
-    const updated = { ...existingLocal, uid: firebaseUser.uid, userId: firebaseUser.uid };
-    localStorage.setItem(LS_KEYS.USER, JSON.stringify(updated));
-    return updated;
-  }
-
-  // 3. Auto-provision profile from Google Account
-  const displayName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Field Executive';
-  const autoProfile: UserProfile = {
-    uid: firebaseUser.uid,
-    userId: firebaseUser.uid,
-    name: displayName.toUpperCase(),
-    email: firebaseUser.email || '',
-    employeeId: `EMP-${firebaseUser.uid.slice(0, 4).toUpperCase()}`,
-    phoneNumber: firebaseUser.phoneNumber || '',
-    storeName: 'RELIANCE DIGITAL',
-    monthlyTarget: 100000,
-    avatar: firebaseUser.photoURL || undefined
-  };
-
-  try {
-    localStorage.setItem(LS_KEYS.USER, JSON.stringify(autoProfile));
-    const userDocRef = doc(db, 'users', firebaseUser.uid);
-    await setDoc(userDocRef, autoProfile, { merge: true });
-  } catch (e) {
-    console.warn("Auto-provision save warn", e);
-  }
-
-  return autoProfile;
-};
 
 export const logoutUser = async () => {
   try {
     localStorage.removeItem(LS_KEYS.USER);
-    await logoutFirebase();
-  } catch (e) {
+    } catch (e) {
     console.error("logoutUser error", e);
   }
 };
