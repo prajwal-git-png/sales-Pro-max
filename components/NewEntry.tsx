@@ -7,7 +7,8 @@ import { saveSaleEntry, compressImage } from '../services/storageService';
 import { generateTextReport, formatToDisplayDate } from '../services/reportService';
 
 import { BAJAJ_PRODUCTS, MR_PRODUCTS } from "../services/excelExportService";
-const PRODUCT_LIST = [...BAJAJ_PRODUCTS, ...MR_PRODUCTS].map(p => p.description);
+const PRODUCT_LIST_OBJS = [...BAJAJ_PRODUCTS.map(p => ({ ...p, brand: 'BAJAJ' })), ...MR_PRODUCTS.map(p => ({ ...p, brand: 'MORPHY RICHARDS' }))];
+const PRODUCT_LIST = PRODUCT_LIST_OBJS.map(p => p.description);
 
 interface NewEntryProps {
   user: UserProfile;
@@ -35,11 +36,12 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   const [notes, setNotes] = useState('');
 
   const filteredProducts = searchTerm 
-      ? PRODUCT_LIST.filter(p => {
-          const searchWords = searchTerm.toLowerCase().split(' ').filter(Boolean);
-          const productLower = p.toLowerCase();
-          return searchWords.every(word => productLower.includes(word));
-        })
+      ? PRODUCT_LIST_OBJS.filter(p => {
+          let searchStr = (p.brand + ' ' + p.category + ' ' + p.description).toLowerCase();
+          // Normalize "mr" to "morphy richards" in search terms
+          const searchWords = searchTerm.toLowerCase().replace(/\bmr\b/g, 'morphy richards').replace(/otgs/g, 'otg').split(' ').filter(Boolean);
+          return searchWords.every(word => searchStr.includes(word));
+        }).map(p => p.description)
       : PRODUCT_LIST;
 
   const addItem = () => {

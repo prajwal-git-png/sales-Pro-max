@@ -177,8 +177,7 @@ const getLocalAll = <T>(storeName: string): T[] => {
       if (!k) continue;
 
       // Only merge if it belongs to current active UID OR the legacy 'default_user' (unregistered)
-      const isCurrentOrLegacy = k.includes(`_${activeUid}_`) || k.includes(`_default_user_`);
-      if (!isCurrentOrLegacy) continue;
+      // Removed strict partitioning so legacy Firebase-UID data is not lost on the same device.
 
       if (k.startsWith(`${LS_KEYS.STORE_PREFIX}${storeName}_`) && k.endsWith('_all') && k !== primaryKey) {
         try {
