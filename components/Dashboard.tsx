@@ -325,7 +325,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
                 </GlassCard>
             )}
           </div>
-          {[...filteredSales].map((report, i) => (
+          {[...filteredSales].map((report) => (
               <GlassCard key={report.date} className="p-4 rounded-3xl mb-2" onClick={() => handleDateSelect(report)}>
                 <div className="flex justify-between items-center"><div><p className="font-bold flex items-center gap-2 text-zinc-900 dark:text-zinc-100">{formatToDisplayDate(report.date)}{report.isWeekOff && <span className="text-[10px] bg-zinc-200/80 dark:bg-zinc-800/80 text-zinc-600 dark:text-zinc-300 px-2 py-0.5 rounded-3xl border border-zinc-300 dark:border-zinc-600">OFF</span>}</p><p className="text-sm text-zinc-500">{report.isWeekOff ? 'Week Off' : `${report.totalQty} items • ₹${report.totalValue.toLocaleString()}`}</p></div><div className="h-8 w-8 bg-white/50 dark:bg-zinc-800/50 border border-white/40 dark:border-white/20 rounded-3xl flex items-center justify-center text-black dark:text-white"><List size={16} /></div></div>
              </GlassCard>

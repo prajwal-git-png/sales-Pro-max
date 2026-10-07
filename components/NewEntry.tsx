@@ -37,7 +37,7 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
 
   const filteredProducts = searchTerm 
       ? PRODUCT_LIST_OBJS.filter(p => {
-          let searchStr = (p.brand + ' ' + p.category + ' ' + p.description).toLowerCase();
+          let searchStr = (p.brand + ' ' + p.category + ' ' + (p.article || '') + ' ' + (p.rdArticle || '') + ' ' + p.description).toLowerCase();
           // Normalize "mr" to "morphy richards" in search terms
           const searchWords = searchTerm.toLowerCase().replace(/\bmr\b/g, 'morphy richards').replace(/otgs/g, 'otg').split(' ').filter(Boolean);
           return searchWords.every(word => searchStr.includes(word));

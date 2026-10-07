@@ -171,7 +171,6 @@ const getLocalAll = <T>(storeName: string): T[] => {
     }
 
     // 2. Scan ALL localStorage keys matching this storeName to catch legacy or previous-UID data
-    const activeUid = getUid();
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (!k) continue;
@@ -235,24 +234,15 @@ export const getFromStore = async <T>(storeName: string, key: string): Promise<T
   if (storeName === 'images') {
     // 1. Check IndexedDB first
     const idbRecord = await idbGetImages(docId, normKey);
-    let localVal: T | undefined = idbRecord ? ({ date: idbRecord.date, images: idbRecord.images, userId: idbRecord.userId } as T) : undefined;
-    
-    // 2. Check Cloud
-    const uid = null;
-    
+    const localVal: T | undefined = idbRecord ? ({ date: idbRecord.date, images: idbRecord.images, userId: idbRecord.userId } as T) : undefined;
     return localVal;
   }
 
   const localVal = getLocalItem<T>(storeName, normKey);
-  const uid = null;
-  if (!uid) return localVal;
-
-  
+  return localVal;
 };
 
 export const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
-  const uid = null;
-
   if (storeName === 'images') {
     const idbList = await idbGetAllImages();
     const map = new Map<string, any>();
@@ -260,15 +250,11 @@ export const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
       map.set(r.date, { date: r.date, images: r.images, userId: r.userId });
     });
 
-    
-
     return Array.from(map.values()) as T[];
   }
 
   const localList = getLocalAll<T>(storeName);
-  if (!uid) return localList;
-
-  
+  return localList;
 };
 
 export const putToStore = async <T>(storeName: string, key: string, data: T): Promise<void> => {

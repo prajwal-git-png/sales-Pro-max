@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { GlassCard, GlassInput, GlassButton } from './ui/GlassComponents';
 import { UserProfile } from '../types';
 import { saveUser } from '../services/storageService';
-import { AlertCircle, RefreshCw, Smartphone, Download, ExternalLink } from 'lucide-react';
+import { AlertCircle, Smartphone, Download, ExternalLink } from 'lucide-react';
 import { usePWAInstall, InstallModal } from './InstallPWA';
 
 interface AuthProps {
