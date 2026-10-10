@@ -105,4 +105,4 @@ export interface FollowUp {
   createdAt: string;
 }
 
-export type Tab = 'dashboard' | 'attendance' | 'entry' | 'eod' | 'crm' | 'settings' | 'performance';
+export type Tab = 'dashboard' | 'attendance' | 'entry' | 'crm' | 'settings';

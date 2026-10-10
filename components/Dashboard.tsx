@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Store, Send, Package, ClipboardList } from 'lucide-react';
-import { DailyReport, SaleItem, UserProfile, Complaint } from '../types';
-import { GlassCard, GlassButton, GlassInput, Modal } from './ui/GlassComponents';
-import { generateTextReport, generateStoreEODReport, formatToDisplayDate } from '../services/reportService';
-import { deleteDailyReport, updateDailyReport, saveUser, getComplaints } from '../services/storageService';
+import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Package, ClipboardList, PlusCircle } from 'lucide-react';
+import { DailyReport, SaleItem, UserProfile, Complaint, Tab } from '../types';
+import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
+import { generateTextReport, formatToDisplayDate } from '../services/reportService';
+import { deleteDailyReport, updateDailyReport, getComplaints } from '../services/storageService';
 import { getMotivationalQuote } from '../services/aiService';
 
 // Fix: Added missing DashboardProps interface
@@ -12,7 +12,9 @@ interface DashboardProps {
   sales: DailyReport[];
   user: UserProfile;
   onDataChange: () => void;
-  onUpdateUser: (u: UserProfile) => void;
+  onUpdateUser?: (u: UserProfile) => void;
+  onNavigate?: (tab: Tab) => void;
+  onSelectDateForEntry?: (date: string) => void;
 }
 
 const CountUp = ({ end, prefix = '', suffix = '', duration = 1500 }: { end: number, prefix?: string, suffix?: string, duration?: number }) => {
@@ -37,13 +39,11 @@ const CountUp = ({ end, prefix = '', suffix = '', duration = 1500 }: { end: numb
     return <span>{prefix}{count.toLocaleString()}{suffix}</span>;
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpdateUser }) => {
+const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavigate, onSelectDateForEntry }) => {
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [selectedDateReport, setSelectedDateReport] = useState<DailyReport | null>(null);
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
   const [quote, setQuote] = useState("Loading inspiration... ✨");
-  const [showEODModal, setShowEODModal] = useState(false);
-  const [eodForm, setEodForm] = useState({ dayTarget: user.customTargets?.daily || 0, weekTarget: user.customTargets?.weekly || 0, eolTarget: user.customTargets?.eol || 0, eolAchieve: 0 });
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState({ productName: '', date: '', minQty: '', minPrice: '' });
@@ -51,8 +51,19 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
   const [editItemState, setEditItemState] = useState<SaleItem | null>(null);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   
+  const handleCalendarDateClick = (dateStr: string, report?: DailyReport) => {
+    if (report) {
+      handleDateSelect(report);
+    } else {
+      if (onSelectDateForEntry) {
+        onSelectDateForEntry(dateStr);
+      } else if (onNavigate) {
+        onNavigate('entry');
+      }
+    }
+  };
+  
   useEffect(() => { getMotivationalQuote(user.apiKey).then(setQuote); getComplaints().then(setComplaints); }, [user.apiKey]);
-  useEffect(() => { setEodForm(prev => ({ ...prev, dayTarget: user.customTargets?.daily || prev.dayTarget, weekTarget: user.customTargets?.weekly || prev.weekTarget, eolTarget: user.customTargets?.eol || prev.eolTarget })); }, [user.customTargets]);
 
   const { mtdValue, mtdPercentage, balance, monthName, currentMonthSalesCount } = useMemo(() => {
     const now = currentMonth;
@@ -131,35 +142,6 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
           return true;
       }).sort((a, b) => new Date(b.date || '').getTime() - new Date(a.date || '').getTime());
   }, [sales, viewMode, filters]);
-
-  const getEODStats = () => {
-      const dateStr = selectedDateReport ? selectedDateReport.date : new Date().toISOString().split('T')[0];
-      const dayAch = sales.find(s => s.date === dateStr)?.totalValue || 0;
-      const d = new Date(dateStr);
-      const day = d.getDay();
-      const diff = (day + 6) % 7;
-      const monday = new Date(d);
-      monday.setDate(d.getDate() - diff);
-      monday.setHours(0,0,0,0);
-      const targetDate = new Date(dateStr);
-      targetDate.setHours(23,59,59,999);
-      const weekAch = sales.reduce((acc, s) => {
-          const sDate = new Date(s.date);
-          if (sDate >= monday && sDate <= targetDate) return acc + s.totalValue;
-          return acc;
-      }, 0);
-      return { dateStr, dayAch, weekAch };
-  };
-
-  const handleEODShare = () => {
-      const { dateStr, dayAch, weekAch } = getEODStats();
-      const updatedUser = { ...user, customTargets: { daily: eodForm.dayTarget, weekly: eodForm.weekTarget, eol: eodForm.eolTarget } };
-      saveUser(updatedUser);
-      onUpdateUser(updatedUser);
-      const reportText = generateStoreEODReport(user, dateStr, eodForm.dayTarget, dayAch, eodForm.weekTarget, weekAch, eodForm.eolTarget, eodForm.eolAchieve);
-      window.open(`https://wa.me/?text=${encodeURIComponent(reportText)}`, '_blank');
-      setShowEODModal(false);
-  };
 
   const handleDeleteEntry = async (date: string) => {
       await deleteDailyReport(date);
@@ -282,7 +264,26 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
           <div className="flex justify-between mt-2 text-xs text-zinc-500"><span>0%</span><span><CountUp end={mtdPercentage} suffix="%" /></span><span>100%</span></div>
       </GlassCard>
 
-      <div className="flex gap-2"><GlassButton onClick={handleCopyToday} className="flex-1 !py-3 bg-white/50 dark:bg-zinc-800/60 backdrop-blur-md hover:bg-white/70 dark:hover:bg-zinc-700/80 !text-sm border border-white/40 dark:border-white/20 rounded-3xl"><Copy size={16} /> Copy Report</GlassButton><GlassButton onClick={() => setShowEODModal(true)} className="flex-1 !py-3 bg-blue-600/80 hover:bg-blue-600/90 backdrop-blur-md !text-sm !border-blue-400/30 shadow-sm rounded-3xl"><Store size={16} /> Store EOD</GlassButton></div>
+      {/* Main Action Buttons */}
+      <div className="space-y-2.5">
+        <GlassButton
+          onClick={() => onNavigate?.('entry')}
+          variant="primary"
+          className="w-full !py-3.5 shadow-xl"
+        >
+          <PlusCircle size={18} />
+          <span>Enter Detail (Daily Sales)</span>
+        </GlassButton>
+
+        <GlassButton 
+          onClick={handleCopyToday} 
+          variant="secondary"
+          className="w-full !py-3 !text-sm"
+        >
+          <Copy size={16} />
+          <span>Copy Today's Report</span>
+        </GlassButton>
+      </div>
       <div className="flex p-1 bg-white/40 dark:bg-white/10 rounded-3xl border border-white/40 dark:border-white/20 backdrop-blur-md w-fit mx-auto"><button onClick={() => setViewMode('calendar')} className={`px-6 py-2 rounded-3xl text-sm font-medium transition-all ${viewMode === 'calendar' ? 'bg-white/80 dark:bg-zinc-800/80 shadow-sm text-black dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'}`}>Calendar</button><button onClick={() => setViewMode('list')} className={`px-6 py-2 rounded-3xl text-sm font-medium transition-all ${viewMode === 'list' ? 'bg-white/80 dark:bg-zinc-800/80 shadow-sm text-black dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'}`}>List View</button></div>
 
       {viewMode === 'calendar' ? (
@@ -307,9 +308,22 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
               const isToday = d.dateStr === todayStr;
               const isWeekOff = report?.isWeekOff;
               return (
-                <div key={d.dateStr} onClick={() => report ? handleDateSelect(report) : null} className={`aspect-square rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all border shadow-sm relative overflow-hidden ${isToday ? 'border-zinc-900 dark:border-white ring-1 ring-zinc-200 dark:ring-zinc-700' : 'border-white/40 dark:border-white/10 hover:bg-white/40 dark:hover:bg-white/10'} ${report ? (isWeekOff ? 'bg-gray-200/80 dark:bg-gray-800/80' : 'bg-white/60 dark:bg-zinc-800/80') : 'bg-white/20 dark:bg-zinc-900/20'}`}>
+                <div 
+                  key={d.dateStr} 
+                  onClick={() => handleCalendarDateClick(d.dateStr, report)} 
+                  title={report ? `${report.totalQty} items sold` : "Click to enter detail for this date"}
+                  className={`aspect-square rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all border shadow-sm relative overflow-hidden group ${isToday ? 'border-zinc-900 dark:border-white ring-1 ring-zinc-200 dark:ring-zinc-700' : 'border-white/40 dark:border-white/10 hover:border-blue-400 hover:bg-white/60 dark:hover:bg-white/10'} ${report ? (isWeekOff ? 'bg-gray-200/80 dark:bg-gray-800/80' : 'bg-white/60 dark:bg-zinc-800/80') : 'bg-white/20 dark:bg-zinc-900/20'}`}
+                >
                   <span className={`text-xs ${isToday ? 'font-bold text-black dark:text-white' : ''}`}>{d.day}</span>
-                  {report && <span className={`text-[9px] font-bold mt-0.5 ${isWeekOff ? 'text-gray-500' : 'text-green-600 dark:text-green-400'}`}>{isWeekOff ? 'OFF' : `${report.totalQty}u`}</span>}
+                  {report ? (
+                    <span className={`text-[9px] font-bold mt-0.5 ${isWeekOff ? 'text-gray-500' : 'text-green-600 dark:text-green-400'}`}>
+                      {isWeekOff ? 'OFF' : `${report.totalQty}u`}
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-zinc-300 dark:text-zinc-600 group-hover:text-blue-500 font-bold mt-0.5 transition-colors">
+                      +
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -368,17 +382,25 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onUpda
                 )}
                 </>
             )}
-             <div className="grid grid-cols-2 gap-3 mt-6 sticky bottom-0 bg-white/0 pt-2"><GlassButton onClick={() => copyReport(selectedDateReport)} variant="primary">Copy Report</GlassButton><GlassButton variant="danger" onClick={() => handleDeleteEntry(selectedDateReport.date)}>Delete All</GlassButton></div>
+            <div className="pt-2">
+              <GlassButton
+                type="button"
+                onClick={() => {
+                  const targetDate = selectedDateReport.date;
+                  setSelectedDateReport(null);
+                  if (onSelectDateForEntry) onSelectDateForEntry(targetDate);
+                  else if (onNavigate) onNavigate('entry');
+                }}
+                variant="secondary"
+                className="w-full !py-2.5 !text-xs rounded-2xl flex items-center justify-center gap-2"
+              >
+                <PlusCircle size={15} />
+                <span>Enter / Add More Items for {formatToDisplayDate(selectedDateReport.date)}</span>
+              </GlassButton>
+            </div>
+             <div className="grid grid-cols-2 gap-3 mt-3 sticky bottom-0 bg-white/0 pt-2"><GlassButton onClick={() => copyReport(selectedDateReport)} variant="primary">Copy Report</GlassButton><GlassButton variant="danger" onClick={() => handleDeleteEntry(selectedDateReport.date)}>Delete All</GlassButton></div>
           </div>
         )}
-      </Modal>
-      
-      <Modal isOpen={showEODModal} onClose={() => setShowEODModal(false)} title="Store EOD Report">
-        <div className="space-y-4">
-            <div className="bg-blue-50/50 dark:bg-blue-900/20 border border-blue-100/50 dark:border-blue-500/20 backdrop-blur-sm p-3 rounded-3xl mb-4"><p className="text-xs text-blue-600 dark:text-blue-300 font-semibold mb-1">Date: {formatToDisplayDate(getEODStats().dateStr)}</p><p className="text-xs text-zinc-500">Calculated stats are based on today's entries.</p></div>
-            <div className="grid grid-cols-2 gap-4"><div className="space-y-1"><label className="text-[10px] font-bold uppercase text-zinc-500">Day Target</label><GlassInput type="number" value={eodForm.dayTarget} onChange={e => setEodForm({...eodForm, dayTarget: parseInt(e.target.value) || 0})} /></div><div className="space-y-1"><label className="text-[10px] font-bold uppercase text-zinc-500">Day Achieved</label><div className="px-3 py-3 rounded-3xl bg-white/50 dark:bg-white/5 border border-white/40 dark:border-white/10 backdrop-blur-md font-bold text-zinc-700 dark:text-zinc-300">₹{getEODStats().dayAch.toLocaleString()}</div></div><div className="space-y-1"><label className="text-[10px] font-bold uppercase text-zinc-500">Week Target</label><GlassInput type="number" value={eodForm.weekTarget} onChange={e => setEodForm({...eodForm, weekTarget: parseInt(e.target.value) || 0})} /></div><div className="space-y-1"><label className="text-[10px] font-bold uppercase text-zinc-500">Week Achieved</label><div className="px-3 py-3 rounded-3xl bg-white/50 dark:bg-white/5 border border-white/40 dark:border-white/10 backdrop-blur-md font-bold text-zinc-700 dark:text-zinc-300">₹{getEODStats().weekAch.toLocaleString()}</div></div><div className="space-y-1"><label className="text-[10px] font-bold uppercase text-zinc-500">EOL Target</label><GlassInput type="number" value={eodForm.eolTarget} onChange={e => setEodForm({...eodForm, eolTarget: parseInt(e.target.value) || 0})} /></div><div className="space-y-1"><label className="text-[10px] font-bold uppercase text-zinc-500">EOL Achieved</label><GlassInput type="number" value={eodForm.eolAchieve} onChange={e => setEodForm({...eodForm, eolAchieve: parseInt(e.target.value) || 0})} /></div></div>
-            <GlassButton onClick={handleEODShare} className="w-full mt-4 flex items-center justify-center gap-2 rounded-3xl"><Send size={18} /> Share to WhatsApp</GlassButton>
-        </div>
       </Modal>
 
       {zoomedImage && (

@@ -3,10 +3,8 @@ import Layout from './components/Layout';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import NewEntry from './components/NewEntry';
-import EOD from './components/EOD';
 import CRM from './components/CRM';
 import Settings from './components/Settings';
-import Performance from './components/Performance';
 import { Tab, UserProfile, DailyReport } from './types';
 import { getUser, logoutUser, getSalesWithoutImages, getTheme, saveTheme, } from './services/storageService';
 
@@ -19,6 +17,7 @@ const App = () => {
     }
   });
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
+  const [selectedEntryDate, setSelectedEntryDate] = useState<string | undefined>(undefined);
   const [salesData, setSalesData] = useState<DailyReport[]>([]);
   const [isDark, setIsDark] = useState<boolean>(() => {
     try {
@@ -77,11 +76,28 @@ const App = () => {
       salesData={salesData}
       onUpdateUser={setUser}
     >
-      {activeTab === 'dashboard' && <Dashboard sales={salesData} user={user} onDataChange={refreshData} onUpdateUser={setUser} />}
-      {activeTab === 'entry' && <NewEntry user={user} onEntryComplete={refreshData} />}
-      {activeTab === 'eod' && <EOD user={user} onUpdateUser={setUser} />}
+      {activeTab === 'dashboard' && (
+        <Dashboard 
+          sales={salesData} 
+          user={user} 
+          onDataChange={refreshData} 
+          onUpdateUser={setUser} 
+          onNavigate={setActiveTab}
+          onSelectDateForEntry={(date) => {
+            setSelectedEntryDate(date);
+            setActiveTab('entry');
+          }}
+        />
+      )}
+      {activeTab === 'entry' && (
+        <NewEntry 
+          user={user} 
+          onEntryComplete={refreshData} 
+          initialDate={selectedEntryDate}
+          onBackToDashboard={() => setActiveTab('dashboard')}
+        />
+      )}
       {activeTab === 'crm' && <CRM user={user} />}
-      {activeTab === 'performance' && <Performance sales={salesData} />}
       {activeTab === 'settings' && <Settings user={user} onUpdateUser={setUser} onLogout={handleLogout} isDark={isDark} toggleTheme={toggleTheme} onDataChange={refreshData} />}
     </Layout>
   );

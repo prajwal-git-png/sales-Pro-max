@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Image as ImageIcon, RefreshCcw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Image as ImageIcon, RefreshCcw, ArrowLeft } from 'lucide-react';
 import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
 import { SaleItem, UserProfile } from '../types';
 import { saveSaleEntry, compressImage } from '../services/storageService';
@@ -13,13 +13,21 @@ const PRODUCT_LIST = PRODUCT_LIST_OBJS.map(p => p.description);
 interface NewEntryProps {
   user: UserProfile;
   onEntryComplete: () => void;
+  initialDate?: string;
+  onBackToDashboard?: () => void;
 }
 
-const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate, onBackToDashboard }) => {
+  const [date, setDate] = useState(initialDate || new Date().toISOString().split('T')[0]);
   const [items, setItems] = useState<SaleItem[]>([
     { id: '1', productName: '', quantity: 1, price: 0 }
   ]);
+
+  useEffect(() => {
+    if (initialDate) {
+      setDate(initialDate);
+    }
+  }, [initialDate]);
   const [inputModes, setInputModes] = useState<('unit'|'total')[]>(['unit']);
   const [billImages, setBillImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -270,9 +278,22 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
   return (
     <>
     <div className="space-y-6 animate-in slide-in-from-bottom-5 fade-in duration-500">
-      <div className="text-center mb-6">
-        <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-800 to-zinc-500 dark:from-zinc-100 dark:to-zinc-400">New Entry</h2>
-        <p className="text-zinc-500 text-sm">Log your daily performance</p>
+      <div className="flex items-center justify-between mb-4">
+        {onBackToDashboard ? (
+          <button
+            type="button"
+            onClick={onBackToDashboard}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400 bg-white/60 dark:bg-zinc-800/60 hover:bg-white dark:hover:bg-zinc-700 rounded-full border border-zinc-200 dark:border-zinc-700 transition-all shadow-sm"
+          >
+            <ArrowLeft size={14} /> Back
+          </button>
+        ) : <div />}
+        <div className="text-center flex-1 pr-6 sm:pr-0">
+          <h2 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-zinc-800 to-zinc-500 dark:from-zinc-100 dark:to-zinc-400">
+            Enter Detail
+          </h2>
+          <p className="text-zinc-500 text-xs mt-0.5">Log daily sales products, quantities, prices & bills</p>
+        </div>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
@@ -479,7 +500,20 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete }) => {
                 <button onClick={handleCopyText} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 transition-all border border-blue-500/20 hover:scale-[1.02]"><Copy size={24} /><span className="font-bold text-sm">Copy</span></button>
             </div>
             )}
-            <GlassButton onClick={resetForm} variant="secondary" className="w-full rounded-3xl">Close & New Entry</GlassButton>
+            <div className="flex flex-col gap-2">
+              <GlassButton onClick={resetForm} variant="secondary" className="w-full rounded-3xl">
+                + Add Another Entry
+              </GlassButton>
+              {onBackToDashboard && (
+                <button
+                  type="button"
+                  onClick={() => { resetForm(); onBackToDashboard(); }}
+                  className="w-full py-2.5 px-4 rounded-3xl text-sm font-semibold text-zinc-700 dark:text-zinc-200 bg-zinc-100 dark:bg-zinc-800 hover:bg-zinc-200 dark:hover:bg-zinc-700 transition-colors"
+                >
+                  Return to Dashboard
+                </button>
+              )}
+            </div>
         </div>
     </Modal>
     </>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Settings, ClipboardCheck, CalendarCheck, BarChart2, Sparkles } from 'lucide-react';
+import { Home, Users, Settings, CalendarCheck, Sparkles, PlusCircle } from 'lucide-react';
 import { Tab, UserProfile, DailyReport } from '../types';
 import Attendance from './Attendance';
 import { InstallBanner } from './InstallPWA';
@@ -40,10 +40,9 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
 
   const navItems: { id: Tab; icon: React.ElementType; label: string }[] = [
     { id: 'dashboard', icon: Home, label: 'Home' },
+    { id: 'entry', icon: PlusCircle, label: 'Enter Detail' },
     { id: 'attendance', icon: CalendarCheck, label: 'Attend' },
-    { id: 'performance', icon: BarChart2, label: 'Stats' },
     { id: 'crm', icon: Users, label: 'CRM' },
-    { id: 'eod', icon: ClipboardCheck, label: 'EOD' },
     { id: 'settings', icon: Settings, label: 'Settings' }
   ];
 
@@ -68,7 +67,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
             {!isIslandExpanded ? (
                 <>
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                    <span className="text-xs font-semibold tracking-wide truncate max-w-[200px]">
+                    <span className="text-xs font-semibold tracking-wide truncate max-w-[160px] sm:max-w-[220px]">
                       {user.storeName || "SalesTrack"}
                     </span>
                     <button 
@@ -77,7 +76,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
                         setShowCoach(true); 
                       }} 
                       title="Open Gemini AI Coach"
-                      className="ml-auto pl-2 flex items-center gap-1 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
+                      className="ml-auto pl-2 flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
                     >
                       <Sparkles size={12} className="animate-spin text-emerald-400" />
                       AI Coach
@@ -97,17 +96,17 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
                     
                     <p className="text-sm font-serif italic text-zinc-300 px-2 text-center">"{quote}"</p>
                     
-                    <div className="flex gap-2 w-full pt-1">
+                    <div className="w-full pt-1">
                         <button 
                           onClick={(e) => { 
                             e.stopPropagation(); 
                             setShowCoach(true); 
                             setIsIslandExpanded(false); 
                           }} 
-                          className="flex-1 bg-emerald-600 hover:bg-emerald-500 py-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold active:scale-95 transition-all text-white shadow-lg shadow-emerald-900/30"
+                          className="w-full bg-emerald-600 hover:bg-emerald-500 py-3 rounded-2xl flex items-center justify-center gap-2 text-xs font-bold active:scale-95 transition-all text-white shadow-lg shadow-emerald-900/30"
                         >
                             <Sparkles size={15} />
-                            Launch AI Sales Coach
+                            AI Sales Coach
                         </button>
                     </div>
                 </div>
@@ -135,14 +134,30 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
 
       {/* Bottom Nav Bar */}
       <div className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4">
-        <div className="bg-white/90 dark:bg-zinc-900/90 backdrop-blur-3xl border border-white/60 dark:border-white/10 shadow-md rounded-3xl px-3 py-2 flex items-center gap-1 sm:gap-4 overflow-x-auto max-w-full no-scrollbar">
+        <div className="bg-white/95 dark:bg-zinc-900/95 backdrop-blur-3xl border border-white/60 dark:border-white/10 shadow-xl rounded-3xl px-3 sm:px-6 py-2 flex items-center justify-around gap-2 sm:gap-4 overflow-x-auto max-w-lg w-full no-scrollbar">
             {navItems.map((item) => {
               const isActive = activeTab === item.id;
               return (
-                <button key={item.id} onClick={() => onTabChange(item.id)} className={`relative flex flex-col items-center justify-center transition-all min-w-[50px] ${isActive ? 'text-zinc-900 dark:text-white scale-110' : 'text-zinc-500 dark:text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-300'}`}>
-                  <div className={`p-2 rounded-3xl ${isActive ? 'bg-zinc-200/50 dark:bg-white/10' : ''}`}><item.icon size={20} /></div>
-                  {isActive && <span className="absolute -bottom-1 w-1 h-1 bg-zinc-900 dark:bg-white rounded-full" />}
-                  <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5">{item.label}</span>
+                <button 
+                  key={item.id} 
+                  onClick={() => onTabChange(item.id)} 
+                  className={`relative flex flex-col items-center justify-center transition-all min-w-[52px] sm:min-w-[64px] px-1.5 py-0.5 ${
+                    isActive 
+                      ? 'text-zinc-900 dark:text-white scale-105 font-bold' 
+                      : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200'
+                  }`}
+                >
+                  <div className={`p-1.5 sm:p-2 rounded-2xl transition-all ${
+                    isActive 
+                      ? 'bg-zinc-200/60 dark:bg-white/10' 
+                      : ''
+                  }`}>
+                    <item.icon size={20} />
+                  </div>
+                  {isActive && <span className="absolute -bottom-1 w-1 h-1 rounded-full bg-zinc-900 dark:bg-white" />}
+                  <span className="text-[9px] font-bold uppercase tracking-tight mt-0.5 whitespace-nowrap">
+                    {item.label}
+                  </span>
                 </button>
               );
             })}
