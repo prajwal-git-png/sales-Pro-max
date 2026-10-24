@@ -50,6 +50,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
   const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
   const [editItemState, setEditItemState] = useState<SaleItem | null>(null);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
+  const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   
   const handleCalendarDateClick = (dateStr: string, report?: DailyReport) => {
     if (report) {
@@ -190,16 +191,22 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
   };
 
   const copyReport = (report: DailyReport) => {
-    // Fix: Pass sales as 3rd parameter
     const text = generateTextReport(user, report, sales);
     navigator.clipboard.writeText(text);
-    console.log('Report copied!');
+    setCopyFeedback("Report copied to clipboard! 📋");
+    setTimeout(() => setCopyFeedback(null), 3000);
   };
 
   const handleCopyToday = () => {
       const todayStr = new Date().toISOString().split('T')[0];
-      const todayReport = sales.find(s => s.date === todayStr);
-      if(todayReport) copyReport(todayReport); else console.log('No entry found for today.');
+      const todayReport = sales.find(s => s.date === todayStr) || {
+        date: todayStr,
+        items: [],
+        totalValue: 0,
+        totalQty: 0,
+        isWeekOff: false,
+      };
+      copyReport(todayReport);
   };
 
   const downloadImage = (base64: string, date: string, index: number) => {
@@ -227,6 +234,12 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
 
   return (
     <div className="space-y-6">
+      {copyFeedback && (
+        <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded-2xl text-center text-xs font-bold animate-in fade-in slide-in-from-top-2 flex items-center justify-center gap-2 shadow-sm">
+          <Check size={16} />
+          <span>{copyFeedback}</span>
+        </div>
+      )}
       <GlassCard className="p-4 bg-gradient-to-r from-zinc-50 to-white dark:from-zinc-900 dark:to-zinc-800 animate-in slide-in-from-top-4 duration-500 border-l-4 border-l-yellow-400 shadow-lg rounded-3xl">
          <div className="flex gap-3">
              <div className="bg-yellow-400/20 p-2 rounded-3xl h-fit"><Quote className="text-yellow-600 dark:text-yellow-400" size={18} fill="currentColor" fillOpacity={0.5} /></div>

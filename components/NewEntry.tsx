@@ -235,27 +235,30 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
   const handleShareWhatsApp = async () => {
       const { getSalesWithoutImages } = await import('../services/storageService');
       const allSales = await getSalesWithoutImages();
-      const report = allSales.find(s => s.date === date);
-      if (report) {
-          const text = generateTextReport(user, report, allSales);
-          window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
-      }
+      const report = allSales.find(s => s.date === date) || {
+        date,
+        items: isWeekOff ? [] : items,
+        totalQty: isWeekOff ? 0 : items.reduce((sum, i) => sum + (i.quantity || 0), 0),
+        totalValue: isWeekOff ? 0 : items.reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 0)), 0),
+        isWeekOff,
+      };
+      const text = generateTextReport(user, report, allSales);
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const handleCopyText = async () => {
-      if(isWeekOff) {
-          navigator.clipboard.writeText(`Name: ${user.name}\nDate: ${formatToDisplayDate(date)}\nStatus: Week Off`);
-          console.log('Week Off report copied');
-          return;
-      }
       const { getSalesWithoutImages } = await import('../services/storageService');
       const allSales = await getSalesWithoutImages();
-      const report = allSales.find(s => s.date === date);
-      if (report) {
-          const text = generateTextReport(user, report, allSales);
-          navigator.clipboard.writeText(text);
-          console.log('Report copied!');
-      }
+      const report = allSales.find(s => s.date === date) || {
+        date,
+        items: isWeekOff ? [] : items,
+        totalQty: isWeekOff ? 0 : items.reduce((sum, i) => sum + (i.quantity || 0), 0),
+        totalValue: isWeekOff ? 0 : items.reduce((sum, i) => sum + ((i.price || 0) * (i.quantity || 0)), 0),
+        isWeekOff,
+      };
+      const text = generateTextReport(user, report, allSales);
+      navigator.clipboard.writeText(text);
+      console.log('Report copied!');
   };
 
   const resetForm = () => {
