@@ -10,7 +10,6 @@ const STATIC_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  // Activate immediately
   self.skipWaiting();
 });
 
@@ -30,7 +29,6 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Only intercept GET requests
   if (event.request.method !== 'GET') return;
 
   const url = new URL(event.request.url);
@@ -58,7 +56,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Network-First with fallback for offline navigation
   event.respondWith(
     fetch(event.request)
       .then((networkResponse) => {

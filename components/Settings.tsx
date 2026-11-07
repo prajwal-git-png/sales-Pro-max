@@ -1,9 +1,10 @@
-import { useState, useRef } from 'react';
-import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon, FileSpreadsheet, Smartphone, Key } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { User, Download, Database, AlertTriangle, Upload, CheckCircle2, Target, MapPin, Globe, Map as MapIcon, Save, Sun, Moon, FileSpreadsheet, Smartphone, Key, FileText, Trash2, FileUp, ExternalLink } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
 import { GlassCard, GlassInput, GlassButton, Modal } from './ui/GlassComponents';
 import { UserProfile, StoreLocation } from '../types';
-import { saveUser, compressImage, exportFullBackup, importFullBackup } from '../services/storageService';
+import { saveUser, compressImage, exportFullBackup, importFullBackup, getProductDocs, saveProductDoc, deleteProductDoc, getUser, getSalesWithoutImages, getSalesByMonth, getImagesForDate } from '../services/storageService';
+import { StoredProductDoc } from '../services/indexedDbService';
 import { ReportAdjuster } from './ReportAdjuster';
 import { usePWAInstall, InstallModal } from './InstallPWA';
 import 'leaflet/dist/leaflet.css';
@@ -47,6 +48,62 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
   const [isBackingUp, setIsBackingUp] = useState(false);
   const [statusNotification, setStatusNotification] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   
+  // Product Documentation (PPT / PDF) State
+  const [productDocs, setProductDocs] = useState<StoredProductDoc[]>([]);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const docFileInputRef = useRef<HTMLInputElement>(null);
+
+  const loadProductDocs = async () => {
+    try {
+      const docs = await getProductDocs();
+      setProductDocs(docs);
+    } catch (e) {
+      console.warn("Failed to load product docs", e);
+    }
+  };
+
+  useEffect(() => {
+    loadProductDocs();
+  }, []);
+
+  const handleDocFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const files = Array.from(e.target.files);
+
+    setIsUploadingDoc(true);
+    let successCount = 0;
+    try {
+      for (const file of files) {
+        if (file.size > 50 * 1024 * 1024) {
+          showStatus(`"${file.name}" is over 50MB, skipped.`, 'error');
+          continue;
+        }
+        await saveProductDoc(file);
+        successCount++;
+      }
+      await loadProductDocs();
+      if (successCount > 0) {
+        showStatus(`${successCount} handbook catalog(s) added successfully! Available in Products. 📄`);
+      }
+    } catch (err: any) {
+      showStatus(`Upload failed: ${err?.message || String(err)}`, 'error');
+    } finally {
+      setIsUploadingDoc(false);
+      if (docFileInputRef.current) docFileInputRef.current.value = '';
+    }
+  };
+
+  const handleDeleteDoc = async (id: string, name: string) => {
+    if (!window.confirm(`Delete "${name}"?`)) return;
+    try {
+      await deleteProductDoc(id);
+      await loadProductDocs();
+      showStatus(`Deleted document "${name}".`);
+    } catch (err: any) {
+      showStatus(`Failed to delete document: ${err?.message || String(err)}`, 'error');
+    }
+  };
+
   const { isInstalled, isInIframe, triggerInstall } = usePWAInstall();
   const [showPwaGuideModal, setShowPwaGuideModal] = useState(false);
 
@@ -154,7 +211,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
         const result = await importFullBackup(pendingBackupData);
         if (result.success) { 
             showStatus(result.message);
-            const { getUser } = await import('../services/storageService');
             const updated = getUser();
             if (updated) {
               setEditForm(updated);
@@ -179,7 +235,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
   };
 
   const handlePrintView = async () => {
-      const { getSalesWithoutImages, getSalesByMonth, getImagesForDate } = await import('../services/storageService');
       let salesToPrint = [];
       if (backupMonth) {
           salesToPrint = await getSalesByMonth(backupMonth);
@@ -227,7 +282,6 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
           showStatus("Please select a month first", 'error');
           return;
       }
-      const { getSalesByMonth } = await import('../services/storageService');
       const sales = await getSalesByMonth(backupMonth);
       setReportSales(sales);
       setShowReportAdjuster(true);
@@ -321,6 +375,98 @@ const Settings: React.FC<SettingsProps> = ({ user, onUpdateUser, onLogout, isDar
                 <label className="text-[10px] font-bold text-zinc-400 uppercase">Toll Free Number</label>
                 <GlassInput placeholder="1800-XXX-XXXX" value={editForm.tollFreeNumber || ''} onChange={e => setEditForm({...editForm, tollFreeNumber: e.target.value})} className="rounded-3xl" />
             </div>
+        </GlassCard>
+
+        {/* Product Information & Handbook Documentation (PPT / PDF) */}
+        <h3 className="font-bold text-lg px-2 flex items-center gap-2">
+            <FileText size={18} className="text-blue-600" /> Product Information &amp; Handbook (PPT / PDF)
+        </h3>
+        <GlassCard className="p-5 space-y-4 rounded-3xl">
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Upload official product presentations (PPT/PPTX) or catalogue handbooks (PDF) for full offline reference. Stored securely on your device and linked into the Products catalog.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3">
+                <button
+                    onClick={() => docFileInputRef.current?.click()}
+                    disabled={isUploadingDoc}
+                    className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md shadow-blue-500/20 active:scale-95 disabled:opacity-50"
+                >
+                    {isUploadingDoc ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <FileUp size={16} />
+                    )}
+                    <span>{isUploadingDoc ? "Attaching Document..." : "Add Product PPT / PDF"}</span>
+                </button>
+                <input
+                    type="file"
+                    ref={docFileInputRef}
+                    multiple
+                    className="hidden"
+                    accept=".pdf,.ppt,.pptx,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                    onChange={handleDocFileUpload}
+                />
+                <span className="text-[11px] text-zinc-400">
+                    Supports multiple .pdf, .ppt, .pptx files up to 50MB each
+                </span>
+            </div>
+
+            {/* List of uploaded documents */}
+            {productDocs.length > 0 ? (
+                <div className="space-y-2 pt-2 border-t border-zinc-200/50 dark:border-white/10">
+                    <p className="text-[10px] font-black uppercase text-zinc-400 tracking-wider">
+                        Stored Product Handbooks ({productDocs.length})
+                    </p>
+                    <div className="space-y-2">
+                        {productDocs.map((doc) => (
+                            <div
+                                key={doc.id}
+                                className="p-3 bg-white/70 dark:bg-zinc-800/70 border border-white/50 dark:border-white/10 rounded-2xl flex items-center justify-between gap-3 shadow-sm"
+                            >
+                                <div className="flex items-center gap-2.5 overflow-hidden">
+                                    <div className="p-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl shrink-0">
+                                        <FileText size={18} />
+                                    </div>
+                                    <div className="overflow-hidden">
+                                        <p className="text-xs font-bold text-zinc-800 dark:text-zinc-200 truncate">
+                                            {doc.name}
+                                        </p>
+                                        <p className="text-[10px] text-zinc-400">
+                                            {(doc.size / (1024 * 1024)).toFixed(2)} MB • Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center gap-2 shrink-0">
+                                    <a
+                                        href={doc.dataUrl}
+                                        download={doc.name}
+                                        className="p-2 rounded-xl text-xs bg-zinc-100 dark:bg-zinc-700 hover:bg-zinc-200 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 transition-colors"
+                                        title="Download / View"
+                                    >
+                                        <ExternalLink size={14} />
+                                    </a>
+                                    <button
+                                        onClick={() => handleDeleteDoc(doc.id, doc.name)}
+                                        className="p-2 rounded-xl text-xs text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition-colors"
+                                        title="Delete Document"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            ) : (
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-900/40 border border-dashed border-zinc-200 dark:border-zinc-800 text-center">
+                    <FileText size={24} className="mx-auto mb-1 text-zinc-400 opacity-60" />
+                    <p className="text-xs font-medium text-zinc-500">
+                        No product handbook attached yet. Upload a handbook or reference PPT to carry it with you on the shop floor.
+                    </p>
+                </div>
+            )}
         </GlassCard>
 
         {/* Performance Targets */}

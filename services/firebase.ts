@@ -44,10 +44,8 @@ export const logoutFirebase = () => signOut(auth);
 export const testConnection = async () => {
   try {
     await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error: any) {
-    if (error.message && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration.");
-    }
+  } catch {
+    // Silent check on boot
   }
 };
 testConnection();

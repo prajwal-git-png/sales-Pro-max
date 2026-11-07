@@ -3,7 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Image as ImageIcon, RefreshCcw, ArrowLeft } from 'lucide-react';
 import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
 import { SaleItem, UserProfile } from '../types';
-import { saveSaleEntry, compressImage } from '../services/storageService';
+import { saveSaleEntry, compressImage, saveComplaint, getFromStore, updateDailyReport, getSalesWithoutImages } from '../services/storageService';
+import { extractDataFromBill } from '../services/aiService';
 import { generateTextReport, formatToDisplayDate } from '../services/reportService';
 
 import { BAJAJ_PRODUCTS, MR_PRODUCTS } from "../services/excelExportService";
@@ -108,7 +109,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
         // Add to images list
         setBillImages(prev => [...prev, base64]);
 
-        const { extractDataFromBill } = await import('../services/aiService');
         const extracted = await extractDataFromBill(base64, user);
 
         if (extracted) {
@@ -130,7 +130,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
             }
 
             if (extracted.isGeyserFound) {
-                const { saveComplaint } = await import('../services/storageService');
                 const geyserItem = extracted.items.find(i => i.productName.toLowerCase().includes('geyser') || i.productName.toLowerCase().includes('water heater'));
                 
                 const complaint: any = {
@@ -187,7 +186,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
     
     if (isWeekOff) {
         setIsSubmitting(true);
-        const { getFromStore, updateDailyReport } = await import('../services/storageService');
         const existing = await getFromStore<any>('sales', date);
         const updatedReport = {
           date,
@@ -217,7 +215,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
         txnNumber: txnNumber || undefined
     }));
 
-    const { updateDailyReport, getFromStore } = await import('../services/storageService');
     await saveSaleEntry(date, itemsToSave, billImages);
     
     // Update notes if present
@@ -233,7 +230,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
   };
 
   const handleShareWhatsApp = async () => {
-      const { getSalesWithoutImages } = await import('../services/storageService');
       const allSales = await getSalesWithoutImages();
       const report = allSales.find(s => s.date === date) || {
         date,
@@ -247,7 +243,6 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
   };
 
   const handleCopyText = async () => {
-      const { getSalesWithoutImages } = await import('../services/storageService');
       const allSales = await getSalesWithoutImages();
       const report = allSales.find(s => s.date === date) || {
         date,

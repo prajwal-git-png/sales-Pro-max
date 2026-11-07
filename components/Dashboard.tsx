@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Package, ClipboardList, PlusCircle } from 'lucide-react';
+import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Package, ClipboardList, PlusCircle, ShoppingBag } from 'lucide-react';
 import { DailyReport, SaleItem, UserProfile, Complaint, Tab } from '../types';
 import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
 import { generateTextReport, formatToDisplayDate } from '../services/reportService';
-import { deleteDailyReport, updateDailyReport, getComplaints } from '../services/storageService';
+import { deleteDailyReport, updateDailyReport, getComplaints, getFromStore, getImagesForDate } from '../services/storageService';
 import { getMotivationalQuote } from '../services/aiService';
 
 // Fix: Added missing DashboardProps interface
@@ -216,7 +216,6 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
   const getReportImages = (report: DailyReport) => { return report.billImages || (report.billImage ? [report.billImage] : []); };
 
   const handleDateSelect = async (report: DailyReport) => {
-      const { getFromStore, getImagesForDate } = await import('../services/storageService');
       const fullReport = await getFromStore<DailyReport>('sales', report.date);
       const images = await getImagesForDate(report.date);
       const reportWithImages = fullReport || report;
@@ -288,14 +287,25 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
           <span>Enter Detail (Daily Sales)</span>
         </GlassButton>
 
-        <GlassButton 
-          onClick={handleCopyToday} 
-          variant="secondary"
-          className="w-full !py-3 !text-sm"
-        >
-          <Copy size={16} />
-          <span>Copy Today's Report</span>
-        </GlassButton>
+        <div className="grid grid-cols-2 gap-2">
+          <GlassButton
+            onClick={() => onNavigate?.('products')}
+            variant="secondary"
+            className="w-full !py-3 !text-xs !bg-blue-50/80 dark:!bg-blue-900/20 !border-blue-200/50 dark:!border-blue-500/20 text-blue-700 dark:text-blue-300 font-bold"
+          >
+            <ShoppingBag size={15} />
+            <span>Brand Products</span>
+          </GlassButton>
+
+          <GlassButton 
+            onClick={handleCopyToday} 
+            variant="secondary"
+            className="w-full !py-3 !text-xs"
+          >
+            <Copy size={15} />
+            <span>Copy Today Report</span>
+          </GlassButton>
+        </div>
       </div>
       <div className="flex p-1 bg-white/40 dark:bg-white/10 rounded-3xl border border-white/40 dark:border-white/20 backdrop-blur-md w-fit mx-auto"><button onClick={() => setViewMode('calendar')} className={`px-6 py-2 rounded-3xl text-sm font-medium transition-all ${viewMode === 'calendar' ? 'bg-white/80 dark:bg-zinc-800/80 shadow-sm text-black dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'}`}>Calendar</button><button onClick={() => setViewMode('list')} className={`px-6 py-2 rounded-3xl text-sm font-medium transition-all ${viewMode === 'list' ? 'bg-white/80 dark:bg-zinc-800/80 shadow-sm text-black dark:text-white' : 'text-zinc-500 hover:text-zinc-700 dark:text-zinc-400'}`}>List View</button></div>
 

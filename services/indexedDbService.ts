@@ -4,8 +4,9 @@
  */
 
 const DB_NAME = 'SalesTrack_IndexedDB';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_IMAGES = 'bill_images';
+const STORE_DOCS = 'product_docs';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -24,6 +25,9 @@ const getDB = (): Promise<IDBDatabase> => {
       const db = (event.target as IDBOpenDBRequest).result;
       if (!db.objectStoreNames.contains(STORE_IMAGES)) {
         db.createObjectStore(STORE_IMAGES, { keyPath: 'id' });
+      }
+      if (!db.objectStoreNames.contains(STORE_DOCS)) {
+        db.createObjectStore(STORE_DOCS, { keyPath: 'id' });
       }
     };
 
@@ -128,6 +132,62 @@ export const idbDeleteImages = async (id: string): Promise<void> => {
     });
   } catch (err) {
     console.warn("IndexedDB idbDeleteImages error:", err);
+  }
+};
+
+export interface StoredProductDoc {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  dataUrl: string;
+  uploadedAt: string;
+  userId?: string;
+}
+
+export const idbSaveProductDoc = async (docData: StoredProductDoc): Promise<void> => {
+  try {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_DOCS, 'readwrite');
+      const store = tx.objectStore(STORE_DOCS);
+      const req = store.put(docData);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn("IndexedDB idbSaveProductDoc error:", err);
+  }
+};
+
+export const idbGetProductDocs = async (): Promise<StoredProductDoc[]> => {
+  try {
+    const db = await getDB();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_DOCS, 'readonly');
+      const store = tx.objectStore(STORE_DOCS);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+  } catch (err) {
+    console.warn("IndexedDB idbGetProductDocs error:", err);
+    return [];
+  }
+};
+
+export const idbDeleteProductDoc = async (id: string): Promise<void> => {
+  try {
+    const db = await getDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_DOCS, 'readwrite');
+      const store = tx.objectStore(STORE_DOCS);
+      const req = store.delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  } catch (err) {
+    console.warn("IndexedDB idbDeleteProductDoc error:", err);
   }
 };
 

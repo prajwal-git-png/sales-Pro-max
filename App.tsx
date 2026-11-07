@@ -3,6 +3,7 @@ import Layout from './components/Layout';
 import Auth from './components/Auth';
 import Dashboard from './components/Dashboard';
 import NewEntry from './components/NewEntry';
+import ProductsView from './components/ProductsView';
 import CRM from './components/CRM';
 import Settings from './components/Settings';
 import { Tab, UserProfile, DailyReport } from './types';
@@ -87,6 +88,12 @@ const App = () => {
             setSelectedEntryDate(date);
             setActiveTab('entry');
           }}
+        />
+      )}
+      {activeTab === 'products' && (
+        <ProductsView
+          user={user}
+          onNavigateToSettings={() => setActiveTab('settings')}
         />
       )}
       {activeTab === 'entry' && (

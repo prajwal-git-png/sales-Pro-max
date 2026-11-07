@@ -4,7 +4,11 @@ import {
   idbGetImages, 
   idbGetAllImages, 
   idbDeleteImages, 
-  migrateImagesFromLocalStorage 
+  migrateImagesFromLocalStorage,
+  idbSaveProductDoc,
+  idbGetProductDocs,
+  idbDeleteProductDoc,
+  StoredProductDoc
 } from './indexedDbService';
 
 // Run migration on init to free up any bloated localStorage quota from previous sessions
@@ -853,4 +857,38 @@ export const importFullBackup = async (jsonString: string): Promise<{ success: b
       message: 'Restore failed: ' + (err?.message || String(err)),
     };
   }
+};
+
+export const saveProductDoc = async (file: File): Promise<StoredProductDoc> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const dataUrl = reader.result as string;
+        const docRecord: StoredProductDoc = {
+          id: `doc_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
+          name: file.name,
+          size: file.size,
+          type: file.type || (file.name.endsWith('.pdf') ? 'application/pdf' : file.name.endsWith('.ppt') || file.name.endsWith('.pptx') ? 'application/vnd.ms-powerpoint' : 'application/octet-stream'),
+          dataUrl,
+          uploadedAt: new Date().toISOString(),
+          userId: getUid()
+        };
+        await idbSaveProductDoc(docRecord);
+        resolve(docRecord);
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = (err) => reject(err);
+    reader.readAsDataURL(file);
+  });
+};
+
+export const getProductDocs = async (): Promise<StoredProductDoc[]> => {
+  return await idbGetProductDocs();
+};
+
+export const deleteProductDoc = async (id: string): Promise<void> => {
+  return await idbDeleteProductDoc(id);
 };

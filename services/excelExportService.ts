@@ -1,6 +1,7 @@
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
 import { DailyReport, UserProfile } from '../types';
+import { getSalesWithoutImages } from './storageService';
 
 export interface ProductItem {
   category: string;
@@ -119,7 +120,6 @@ export const generateMonthlyExcelReport = async (
   let allSales: DailyReport[] = sales || [];
   if (!allSales || allSales.length === 0) {
     try {
-      const { getSalesWithoutImages } = await import('./storageService');
       allSales = await getSalesWithoutImages();
     } catch {
       allSales = [];

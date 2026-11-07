@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Settings, CalendarCheck, Sparkles, PlusCircle } from 'lucide-react';
+import { Home, Users, Settings, CalendarCheck, Sparkles, PlusCircle, ShoppingBag } from 'lucide-react';
 import { Tab, UserProfile, DailyReport } from '../types';
 import Attendance from './Attendance';
 import { InstallBanner } from './InstallPWA';
@@ -40,6 +40,7 @@ const Layout: React.FC<LayoutProps> = ({ children, activeTab, onTabChange, user,
 
   const navItems: { id: Tab; icon: React.ElementType; label: string }[] = [
     { id: 'dashboard', icon: Home, label: 'Home' },
+    { id: 'products', icon: ShoppingBag, label: 'Products' },
     { id: 'entry', icon: PlusCircle, label: 'Enter Detail' },
     { id: 'attendance', icon: CalendarCheck, label: 'Attend' },
     { id: 'crm', icon: Users, label: 'CRM' },

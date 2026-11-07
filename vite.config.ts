@@ -26,6 +26,31 @@ export default defineConfig(({ mode }) => {
     ],
     define: {
       'process.env.API_KEY': JSON.stringify(apiKey)
+    },
+    build: {
+      chunkSizeWarningLimit: 2000,
+      rollupOptions: {
+        onwarn(warning, warn) {
+          // Suppress eval warning originating from pdfjs-dist internal quickjs engine
+          if (warning.code === 'EVAL' && warning.id?.includes('pdfjs-dist')) {
+            return;
+          }
+          warn(warning);
+        },
+        output: {
+          manualChunks(id) {
+            if (id.includes('node_modules/pdfjs-dist')) {
+              return 'vendor-pdf';
+            }
+            if (id.includes('node_modules/exceljs') || id.includes('node_modules/xlsx') || id.includes('node_modules/file-saver')) {
+              return 'vendor-excel';
+            }
+            if (id.includes('node_modules/react') || id.includes('node_modules/react-dom')) {
+              return 'vendor-react';
+            }
+          }
+        }
+      }
     }
   }
 })
