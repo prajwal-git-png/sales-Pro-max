@@ -5,7 +5,7 @@ import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
 import { SaleItem, UserProfile } from '../types';
 import { saveSaleEntry, compressImage, saveComplaint, getFromStore, updateDailyReport, getSalesWithoutImages } from '../services/storageService';
 import { extractDataFromBill } from '../services/aiService';
-import { generateTextReport, formatToDisplayDate } from '../services/reportService';
+import { generateTextReport, formatToDisplayDate, isInstantGeyser, isStorageGeyser } from '../services/reportService';
 
 import { BAJAJ_PRODUCTS, MR_PRODUCTS } from "../services/excelExportService";
 const PRODUCT_LIST_OBJS = [...BAJAJ_PRODUCTS.map(p => ({ ...p, brand: 'BAJAJ' })), ...MR_PRODUCTS.map(p => ({ ...p, brand: 'MORPHY RICHARDS' }))];
@@ -271,6 +271,8 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
   };
 
   const totalValue = items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const currentInstantGeyser = items.reduce((sum, item) => isInstantGeyser(item.productName) ? sum + (item.quantity || 0) : sum, 0);
+  const currentStorageGeyser = items.reduce((sum, item) => isStorageGeyser(item.productName) ? sum + (item.quantity || 0) : sum, 0);
   const formattedDate = formatToDisplayDate(date);
 
   return (
@@ -474,7 +476,14 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
 
         {!isWeekOff && (
         <div className="bg-white/60 dark:bg-blue-900/40 backdrop-blur-xl border border-white/50 dark:border-blue-500/30 rounded-3xl p-4 flex justify-between items-center shadow-sm">
-            <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wide">Total Value</span>
+            <div>
+              <span className="text-sm font-semibold text-zinc-600 dark:text-zinc-300 uppercase tracking-wide block">Total Value</span>
+              {(currentInstantGeyser > 0 || currentStorageGeyser > 0) && (
+                <span className="text-[11px] font-bold text-cyan-600 dark:text-cyan-400">
+                  ⚡ Instant Geyser: {currentInstantGeyser} • Storage Geyser: {currentStorageGeyser}
+                </span>
+              )}
+            </div>
             <span className="text-3xl font-bold text-blue-600 dark:text-blue-400 tracking-tight">₹{totalValue.toLocaleString()}</span>
         </div>
         )}
@@ -492,6 +501,15 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
                 {isWeekOff ? <Check size={40} /> : <Check size={40} strokeWidth={3} />}
             </div>
             <p className="text-zinc-600 dark:text-zinc-300 font-medium">{isWeekOff ? `Marked ${formattedDate} as Week Off.` : `Data added to cumulative report for ${formattedDate}.`}</p>
+            {!isWeekOff && (
+            <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl text-left text-xs font-mono border border-zinc-200 dark:border-zinc-700 space-y-1">
+              <p className="font-bold text-zinc-800 dark:text-zinc-200 font-sans text-xs">Included in Daily Report:</p>
+              <div className="grid grid-cols-2 gap-1 text-[11px] text-zinc-600 dark:text-zinc-400">
+                <p>Instant geyser Qty: <strong className="text-cyan-600 dark:text-cyan-400">{currentInstantGeyser}</strong></p>
+                <p>Storage geyser Qty: <strong className="text-blue-600 dark:text-blue-400">{currentStorageGeyser}</strong></p>
+              </div>
+            </div>
+            )}
             {!isWeekOff && (
             <div className="grid grid-cols-2 gap-4">
                 <button onClick={handleShareWhatsApp} className="flex flex-col items-center justify-center gap-2 p-4 rounded-3xl bg-[#25D366]/10 text-[#25D366] hover:bg-[#25D366]/20 transition-all border border-[#25D366]/20 hover:scale-[1.02]"><Send size={24} /><span className="font-bold text-sm">WhatsApp</span></button>

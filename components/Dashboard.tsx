@@ -1,9 +1,9 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Package, ClipboardList, PlusCircle, ShoppingBag } from 'lucide-react';
+import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Package, ClipboardList, PlusCircle, ShoppingBag, Flame } from 'lucide-react';
 import { DailyReport, SaleItem, UserProfile, Complaint, Tab } from '../types';
 import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
-import { generateTextReport, formatToDisplayDate } from '../services/reportService';
+import { generateTextReport, formatToDisplayDate, calculateGeyserSales } from '../services/reportService';
 import { deleteDailyReport, updateDailyReport, getComplaints, getFromStore, getImagesForDate } from '../services/storageService';
 import { getMotivationalQuote } from '../services/aiService';
 
@@ -231,6 +231,20 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
       return { todayItemsSold: items, todayRevenue: revenue, todayCrmAdded: crmAdded };
   }, [sales, complaints, todayStr]);
 
+  const todayReport = useMemo(() => {
+    return sales.find(s => s.date === todayStr) || {
+      date: todayStr,
+      items: [],
+      totalValue: 0,
+      totalQty: 0,
+      isWeekOff: false,
+    };
+  }, [sales, todayStr]);
+
+  const geyserSales = useMemo(() => {
+    return calculateGeyserSales(todayReport, sales);
+  }, [todayReport, sales]);
+
   return (
     <div className="space-y-6">
       {copyFeedback && (
@@ -246,7 +260,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
          </div>
       </GlassCard>
 
-      <div className="grid grid-cols-3 gap-2 mb-4">
+      <div className="grid grid-cols-3 gap-2 mb-2">
           <GlassCard className="p-3 flex flex-col items-center justify-center text-center bg-indigo-50/50 dark:bg-indigo-900/10 animate-in zoom-in duration-500 delay-100 border-indigo-100/50 dark:border-indigo-500/20 rounded-3xl">
             <Package size={20} className="text-indigo-500 mb-1" />
             <p className="text-[10px] uppercase text-zinc-500 font-bold">Items Sold Today</p>
@@ -263,6 +277,41 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
             <p className="text-sm font-bold truncate w-full">{todayCrmAdded}</p>
           </GlassCard>
       </div>
+
+      {/* Geyser Sale Tracker Card */}
+      <GlassCard className="p-3.5 rounded-3xl bg-gradient-to-r from-cyan-500/10 via-blue-500/10 to-indigo-500/10 border-cyan-200/50 dark:border-cyan-500/20 shadow-sm">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-1.5">
+            <div className="p-1 rounded-lg bg-cyan-500/20 text-cyan-600 dark:text-cyan-400">
+              <Flame size={14} />
+            </div>
+            <span className="text-xs font-black uppercase tracking-wider text-zinc-800 dark:text-zinc-200">
+              Geyser Sale Qty
+            </span>
+          </div>
+          <span className="text-[10px] font-mono font-medium text-cyan-700 dark:text-cyan-300">
+            Daily Report Sync ⚡
+          </span>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+          <div className="p-2 rounded-2xl bg-white/70 dark:bg-zinc-800/70 border border-white/60 dark:border-white/10 shadow-xs">
+            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight">Instant Today</p>
+            <p className="text-sm font-black text-cyan-600 dark:text-cyan-400 mt-0.5">{geyserSales.todayInstant}</p>
+          </div>
+          <div className="p-2 rounded-2xl bg-white/70 dark:bg-zinc-800/70 border border-white/60 dark:border-white/10 shadow-xs">
+            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight">Storage Today</p>
+            <p className="text-sm font-black text-blue-600 dark:text-blue-400 mt-0.5">{geyserSales.todayStorage}</p>
+          </div>
+          <div className="p-2 rounded-2xl bg-white/70 dark:bg-zinc-800/70 border border-white/60 dark:border-white/10 shadow-xs">
+            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight">MTD Instant</p>
+            <p className="text-sm font-black text-indigo-600 dark:text-indigo-400 mt-0.5">{geyserSales.mtdInstant}</p>
+          </div>
+          <div className="p-2 rounded-2xl bg-white/70 dark:bg-zinc-800/70 border border-white/60 dark:border-white/10 shadow-xs">
+            <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-tight">MTD Storage</p>
+            <p className="text-sm font-black text-purple-600 dark:text-purple-400 mt-0.5">{geyserSales.mtdStorage}</p>
+          </div>
+        </div>
+      </GlassCard>
 
       <div className="grid grid-cols-3 gap-2">
           <GlassCard className="p-3 flex flex-col items-center justify-center text-center bg-blue-50/50 dark:bg-blue-900/10 animate-in zoom-in duration-500 delay-100 border-blue-100/50 dark:border-blue-500/20 rounded-3xl"><Target size={20} className="text-blue-500 mb-1" /><p className="text-[10px] uppercase text-zinc-500 font-bold">Target</p><p className="text-sm font-bold truncate w-full"><CountUp end={user.monthlyTarget / 1000} prefix="₹" suffix="k" /></p></GlassCard>
@@ -377,6 +426,35 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
             {selectedDateReport.isWeekOff ? ( <div className="text-center py-8 bg-white/40 dark:bg-white/5 rounded-3xl border border-dashed border-white/50 dark:border-white/20 backdrop-blur-sm"><Ban size={40} className="mx-auto text-zinc-400 mb-2" /><p className="text-zinc-500 font-medium">Marked as Week Off</p></div> ) : (
                 <>
                 <div className="grid grid-cols-2 gap-4"><div className="bg-blue-50/50 dark:bg-blue-900/30 border border-blue-100/50 dark:border-blue-500/20 backdrop-blur-sm p-3 rounded-3xl text-center"><p className="text-xs text-zinc-500">Value</p><p className="font-bold text-blue-600">₹{selectedDateReport.totalValue.toLocaleString()}</p></div><div className="bg-purple-50/50 dark:bg-purple-900/30 border border-purple-100/50 dark:border-purple-500/20 backdrop-blur-sm p-3 rounded-3xl text-center"><p className="text-xs text-zinc-500">Quantity</p><p className="font-bold text-purple-600">{selectedDateReport.totalQty}</p></div></div>
+                {(() => {
+                  const dateGeysers = calculateGeyserSales(selectedDateReport, sales);
+                  return (
+                    <div className="p-3 rounded-2xl bg-cyan-50/50 dark:bg-cyan-900/20 border border-cyan-100/50 dark:border-cyan-500/20 space-y-1.5">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-cyan-800 dark:text-cyan-300">
+                        <Flame size={14} />
+                        <span>Geyser Sale Qty</span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center text-xs">
+                        <div className="bg-white/60 dark:bg-zinc-800/60 p-2 rounded-xl">
+                          <span className="text-[10px] text-zinc-500 block">Instant Today</span>
+                          <span className="font-bold text-cyan-600 dark:text-cyan-400">{dateGeysers.todayInstant}</span>
+                        </div>
+                        <div className="bg-white/60 dark:bg-zinc-800/60 p-2 rounded-xl">
+                          <span className="text-[10px] text-zinc-500 block">Storage Today</span>
+                          <span className="font-bold text-blue-600 dark:text-blue-400">{dateGeysers.todayStorage}</span>
+                        </div>
+                        <div className="bg-white/60 dark:bg-zinc-800/60 p-2 rounded-xl">
+                          <span className="text-[10px] text-zinc-500 block">MTD Instant</span>
+                          <span className="font-bold text-indigo-600 dark:text-indigo-400">{dateGeysers.mtdInstant}</span>
+                        </div>
+                        <div className="bg-white/60 dark:bg-zinc-800/60 p-2 rounded-xl">
+                          <span className="text-[10px] text-zinc-500 block">MTD Storage</span>
+                          <span className="font-bold text-purple-600 dark:text-purple-400">{dateGeysers.mtdStorage}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
                 <div className="space-y-3"><h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider sticky top-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl py-2 z-10">Items Sold</h4>
                     {(selectedDateReport.items || []).map((item, idx) => {
                         const isEditing = editingItemIndex === idx;
