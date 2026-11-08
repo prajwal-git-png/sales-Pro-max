@@ -95,6 +95,32 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ user }) => {
 
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
+  // Store Email ID & Closing Remark for WhatsApp Stock Request
+  const [storeEmailId, setStoreEmailId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('salestrack_store_email_id');
+      if (saved) return saved;
+      if ((user as any).storeEmail) return (user as any).storeEmail;
+      if (user.storeCode) {
+        const slug = user.storeName?.toLowerCase().replace(/reliance\s+digital/gi, '').trim().replace(/[^a-z0-9]+/g, '_') || 'store';
+        return `crm_kar.${user.storeCode}_${slug}`;
+      }
+    } catch {
+      // fallback
+    }
+    return 'crm_kar.9562_siddhaganga';
+  });
+
+  const [closingRemark, setClosingRemark] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('salestrack_stock_request_closing');
+      if (saved) return saved;
+    } catch {
+      // fallback
+    }
+    return 'Please arrange the stock sir';
+  });
+
   // Uploaded PDF / PPT Documents State
   const [productDocs, setProductDocs] = useState<StoredProductDoc[]>([]);
   const [activeDoc, setActiveDoc] = useState<StoredProductDoc | null>(null);
@@ -215,36 +241,50 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ user }) => {
     );
   }, [modalSearchQuery]);
 
-  // Format today's date DD/MM/YY
+  // Format today's date DD/MM/YYYY
   const todayFormatted = useMemo(() => {
     const d = new Date();
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
-    const year = String(d.getFullYear()).slice(-2);
+    const year = d.getFullYear();
     return `${day}/${month}/${year}`;
   }, []);
 
-  // WhatsApp formatted string generator
+  // WhatsApp formatted string generator with clean spaces
   const generateWhatsAppMessage = () => {
-    const storeCode = user.storeCode || '8883';
-    const storeName = user.storeName || 'Reliance Digital';
-    const storeLoc = user.storeNameAndLocation || user.storeLocation?.address || `${user.storeName || 'JP nagar'} reliance digital`;
-    const name = user.name || 'Executive';
+    const storeCode = user.storeCode || '9562';
+    const storeName = user.storeName || 'Siddaganga Reliance Digital';
+    const storeLoc = user.storeNameAndLocation || user.storeLocation?.address || user.storeName || 'Kanakapura';
+    const name = user.name || 'Mandara R';
 
     let msg = `*Store code : ${storeCode}\n`;
     msg += `*Store name : ${storeName}\n`;
     msg += `*Location : ${storeLoc}\n`;
     msg += `*Name : ${name}\n`;
-    msg += `*Date : ${todayFormatted}\n`;
+    msg += `*Date : ${todayFormatted}\n\n`;
+    msg += `Stock requirements\n\n`;
 
-    stockRequests.forEach((item) => {
-      msg += `${item.name} : Code -${item.code}\n`;
-      msg += `Store : ${item.storeQty}\n`;
-      if (item.displayRequired) {
-        msg += `Display required\n`;
+    stockRequests.forEach((item, index) => {
+      const hasCodeInName = item.code && item.name.includes(item.code);
+      const codePart = (item.code && !hasCodeInName) ? ` : ${item.code}` : '';
+      msg += `${item.name}${codePart}\n`;
+      msg += `Store : ${item.storeQty || '0'}\n`;
+      const displayPart = item.displayRequired ? ' + Display' : '';
+      msg += `Required : ${item.requiredQty || 1}${displayPart}\n`;
+
+      // Spacing between product blocks
+      if (index < stockRequests.length - 1) {
+        msg += `\n`;
       }
-      msg += `Required : ${item.requiredQty}\n`;
     });
+
+    if (storeEmailId && storeEmailId.trim()) {
+      msg += `\n\nStore email id :- *${storeEmailId.trim()}*\n`;
+    }
+
+    if (closingRemark && closingRemark.trim()) {
+      msg += `\n${closingRemark.trim()}`;
+    }
 
     return msg.trim();
   };
@@ -319,15 +359,22 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ user }) => {
 
   const handleLoadSampleItems = () => {
     setStockRequests([
-      { id: 'req_1', name: 'Bajaj Infrared Induction 2200W', code: '494459697', brand: 'BAJAJ', storeQty: '0', displayRequired: false, requiredQty: 5 },
-      { id: 'req_2', name: 'Bajaj Style Mix Mixer', code: '494622897', brand: 'BAJAJ', storeQty: 'not available', displayRequired: true, requiredQty: 10 },
-      { id: 'req_3', name: 'Bajaj EVOQUE JET military grade MG', code: '494459717', brand: 'BAJAJ', storeQty: '06', displayRequired: false, requiredQty: 5 },
-      { id: 'req_4', name: 'Mr 29L OTG DIGI.', code: '494338634', brand: 'MORPHY RICHARDS', storeQty: '0', displayRequired: false, requiredQty: 6 },
-      { id: 'req_5', name: 'Mr AirCrisp 25L air fryer OTG', code: '494399378', brand: 'MORPHY RICHARDS', storeQty: '0', displayRequired: true, requiredQty: 3 },
-      { id: 'req_6', name: 'Bajaj kompact', code: '494622900', brand: 'BAJAJ', storeQty: '0', displayRequired: false, requiredQty: 15 },
-      { id: 'req_7', name: 'ICX 140TS', code: '494459702', brand: 'BAJAJ', storeQty: '0', displayRequired: false, requiredQty: 5 },
-      { id: 'req_8', name: 'Vogue starm iron', code: '494405194', brand: 'MORPHY RICHARDS', storeQty: '2', displayRequired: false, requiredQty: 10 }
+      { id: 'req_1', name: 'Bajaj 500W Mixer GX18 PRO', code: '', brand: 'BAJAJ', storeQty: '2', displayRequired: false, requiredQty: 10 },
+      { id: 'req_2', name: 'Bajaj 750W mixer Virtue', code: '', brand: 'BAJAJ', storeQty: '2', displayRequired: false, requiredQty: 10 },
+      { id: 'req_3', name: 'MR Grind Pro Maxx 1000W', code: '494338633', brand: 'MORPHY RICHARDS', storeQty: '1', displayRequired: false, requiredQty: 5 },
+      { id: 'req_4', name: 'MR Hand Blender', code: '', brand: 'MORPHY RICHARDS', storeQty: '0', displayRequired: false, requiredQty: 5 },
+      { id: 'req_5', name: 'Bajaj Hand Blender Juvel 300W', code: '491903207', brand: 'BAJAJ', storeQty: '1', displayRequired: false, requiredQty: 5 },
+      { id: 'req_6', name: 'Bajaj Sandwich maker 800W', code: '', brand: 'BAJAJ', storeQty: '00', displayRequired: false, requiredQty: 20 },
+      { id: 'req_7', name: 'Bajaj Infrared Induction 2200W', code: '494459697', brand: 'BAJAJ', storeQty: '0', displayRequired: false, requiredQty: 5 },
+      { id: 'req_8', name: 'Bajaj dry iron Majesty DX4', code: '', brand: 'BAJAJ', storeQty: '2', displayRequired: false, requiredQty: 5 },
+      { id: 'req_9', name: 'Bajaj Style Mix Mixer', code: '494622897', brand: 'BAJAJ', storeQty: '0', displayRequired: true, requiredQty: 5 },
+      { id: 'req_10', name: 'MR Air fryer Crisp pro', code: '', brand: 'MORPHY RICHARDS', storeQty: '0', displayRequired: true, requiredQty: 2 },
+      { id: 'req_11', name: 'Bajaj areno 3l', code: '494426479', brand: 'BAJAJ', storeQty: '1', displayRequired: false, requiredQty: 4 },
+      { id: 'req_12', name: 'MR OTG 29 RCAD', code: '494338634', brand: 'MORPHY RICHARDS', storeQty: '0', displayRequired: true, requiredQty: 2 },
+      { id: 'req_13', name: 'Bajaj 1000 W mixer Evoque jet blk', code: '494459717', brand: 'BAJAJ', storeQty: '1', displayRequired: false, requiredQty: 10 }
     ]);
+    setStoreEmailId('crm_kar.9562_siddhaganga');
+    setClosingRemark('Please arrange the stock sir');
     setCopyFeedback('Reference stock request sample loaded! 📦');
     setTimeout(() => setCopyFeedback(null), 2500);
   };
@@ -435,13 +482,43 @@ export const ProductsView: React.FC<ProductsViewProps> = ({ user }) => {
           </GlassCard>
 
           {/* Store Info Header Summary */}
-          <GlassCard className="p-3.5 rounded-2xl border border-white/60 dark:border-white/10 text-xs font-mono">
+          <GlassCard className="p-3.5 rounded-2xl border border-white/60 dark:border-white/10 text-xs font-mono space-y-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 text-zinc-700 dark:text-zinc-300">
-              <p><strong className="text-zinc-900 dark:text-white font-sans">*Store code :</strong> {user.storeCode || '8883'}</p>
-              <p><strong className="text-zinc-900 dark:text-white font-sans">*Store name :</strong> {user.storeName || 'Reliance Digital'}</p>
-              <p><strong className="text-zinc-900 dark:text-white font-sans">*Location :</strong> {user.storeNameAndLocation || user.storeLocation?.address || `${user.storeName || 'JP nagar'} reliance digital`}</p>
-              <p><strong className="text-zinc-900 dark:text-white font-sans">*Name :</strong> {user.name || 'Executive'}</p>
+              <p><strong className="text-zinc-900 dark:text-white font-sans">*Store code :</strong> {user.storeCode || '9562'}</p>
+              <p><strong className="text-zinc-900 dark:text-white font-sans">*Store name :</strong> {user.storeName || 'Siddaganga Reliance Digital'}</p>
+              <p><strong className="text-zinc-900 dark:text-white font-sans">*Location :</strong> {user.storeNameAndLocation || user.storeLocation?.address || user.storeName || 'Kanakapura'}</p>
+              <p><strong className="text-zinc-900 dark:text-white font-sans">*Name :</strong> {user.name || 'Mandara R'}</p>
               <p><strong className="text-zinc-900 dark:text-white font-sans">*Date :</strong> {todayFormatted}</p>
+              <p><strong className="text-zinc-900 dark:text-white font-sans">Section :</strong> Stock requirements</p>
+            </div>
+
+            <div className="pt-2 border-t border-zinc-200/60 dark:border-zinc-800/60 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-sans font-bold text-zinc-500 whitespace-nowrap">Store email id :</span>
+                <input
+                  type="text"
+                  value={storeEmailId}
+                  onChange={(e) => {
+                    setStoreEmailId(e.target.value);
+                    localStorage.setItem('salestrack_store_email_id', e.target.value);
+                  }}
+                  placeholder="e.g. crm_kar.9562_siddhaganga"
+                  className="bg-white/80 dark:bg-zinc-800/80 px-2.5 py-1 rounded-xl text-xs font-mono text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 w-full outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-sans font-bold text-zinc-500 whitespace-nowrap">Closing remark :</span>
+                <input
+                  type="text"
+                  value={closingRemark}
+                  onChange={(e) => {
+                    setClosingRemark(e.target.value);
+                    localStorage.setItem('salestrack_stock_request_closing', e.target.value);
+                  }}
+                  placeholder="e.g. Please arrange the stock sir"
+                  className="bg-white/80 dark:bg-zinc-800/80 px-2.5 py-1 rounded-xl text-xs font-sans text-zinc-800 dark:text-zinc-200 border border-zinc-200 dark:border-zinc-700 w-full outline-none focus:border-blue-500"
+                />
+              </div>
             </div>
           </GlassCard>
 
