@@ -1,11 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
-import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Image as ImageIcon, RefreshCcw, ArrowLeft } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Camera, Plus, Trash2, Send, Copy, X, Search, ChevronDown, Check, Image as ImageIcon, RefreshCcw, ArrowLeft, Flame, Wrench } from 'lucide-react';
 import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
-import { SaleItem, UserProfile } from '../types';
+import { SaleItem, UserProfile, ComplaintStatus } from '../types';
 import { saveSaleEntry, compressImage, saveComplaint, getFromStore, updateDailyReport, getSalesWithoutImages } from '../services/storageService';
 import { extractDataFromBill } from '../services/aiService';
-import { generateTextReport, formatToDisplayDate, isInstantGeyser, isStorageGeyser } from '../services/reportService';
+import { generateTextReport, formatToDisplayDate, isInstantGeyser, isStorageGeyser, isGeyserProduct } from '../services/reportService';
 
 import { BAJAJ_PRODUCTS, MR_PRODUCTS } from "../services/excelExportService";
 const PRODUCT_LIST_OBJS = [...BAJAJ_PRODUCTS.map(p => ({ ...p, brand: 'BAJAJ' })), ...MR_PRODUCTS.map(p => ({ ...p, brand: 'MORPHY RICHARDS' }))];
@@ -43,6 +43,36 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
   const [billId, setBillId] = useState('');
   const [txnNumber, setTxnNumber] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Geyser CRM / Complaint ID Details
+  const [addGeyserToCrm, setAddGeyserToCrm] = useState(false);
+  const [geyserComplaintId, setGeyserComplaintId] = useState('');
+  const [geyserCustomerName, setGeyserCustomerName] = useState('');
+  const [geyserInstallDone, setGeyserInstallDone] = useState(false);
+  const [scanGeyserNotice, setScanGeyserNotice] = useState(false);
+  const [copiedIdToast, setCopiedIdToast] = useState(false);
+  const [savedCrmSummary, setSavedCrmSummary] = useState<{ count: number; complaintId?: string; done: boolean } | null>(null);
+  const prevHasGeyserRef = useRef(false);
+
+  const geyserItemsInForm = items.filter(i => isGeyserProduct(i.productName));
+  const hasGeyserSelected = !isWeekOff && geyserItemsInForm.length > 0;
+
+  useEffect(() => {
+    if (hasGeyserSelected && !prevHasGeyserRef.current) {
+      setAddGeyserToCrm(true);
+    }
+    if (!hasGeyserSelected) {
+      setScanGeyserNotice(false);
+    }
+    prevHasGeyserRef.current = hasGeyserSelected;
+  }, [hasGeyserSelected]);
+
+  const copyComplaintIdText = (val: string) => {
+    if (!val.trim()) return;
+    navigator.clipboard?.writeText(val.trim()).catch(() => {});
+    setCopiedIdToast(true);
+    setTimeout(() => setCopiedIdToast(false), 2000);
+  };
 
   const filteredProducts = searchTerm 
       ? PRODUCT_LIST_OBJS.filter(p => {
@@ -129,22 +159,10 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
                 setInputModes(newItems.map(() => 'unit'));
             }
 
-            if (extracted.isGeyserFound) {
-                const geyserItem = extracted.items.find(i => i.productName.toLowerCase().includes('geyser') || i.productName.toLowerCase().includes('water heater'));
-                
-                const complaint: any = {
-                    id: Date.now().toString(),
-                    customerName: extracted.customerName || 'Extracted Customer',
-                    phoneNumber: extracted.customerPhone || '',
-                    productModel: geyserItem?.productName || 'Geyser',
-                    issueType: 'Installation',
-                    isResolved: false,
-                    date: extracted.date || new Date().toISOString().split('T')[0]
-                };
-                await saveComplaint(complaint);
-                console.log("Geyser detected! 🚿 Installation ticket has been automatically raised in CRM.");
-            } else {
-                console.log("Bill scanned successfully! ✅ Data populated.");
+            if (extracted.isGeyserFound || (extracted.items && extracted.items.some(i => isGeyserProduct(i.productName)))) {
+                if (extracted.customerName) setGeyserCustomerName(extracted.customerName);
+                setAddGeyserToCrm(true);
+                setScanGeyserNotice(true);
             }
         }
       } catch (err: any) {
@@ -208,11 +226,13 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
     
     setIsSubmitting(true);
     
+    const cleanComplaintId = geyserComplaintId.trim();
     const itemsToSave = items.map(item => ({
         ...item,
         customerPhone: customerPhone || undefined,
         billId: billId || undefined,
-        txnNumber: txnNumber || undefined
+        txnNumber: txnNumber || undefined,
+        complaintId: (isGeyserProduct(item.productName) && cleanComplaintId) ? cleanComplaintId : (item.complaintId || undefined)
     }));
 
     await saveSaleEntry(date, itemsToSave, billImages);
@@ -223,6 +243,47 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
         if (existing) {
             await updateDailyReport(date, { ...existing, notes });
         }
+    }
+
+    // Create CRM Need Installation ticket(s) if Geyser CRM is enabled
+    if (hasGeyserSelected && addGeyserToCrm) {
+        const nowIso = new Date().toISOString();
+        const timePart = nowIso.split('T')[1] || '12:00:00.000Z';
+        const ticketDateIso = `${date}T${timePart}`;
+        const status: ComplaintStatus = geyserInstallDone ? 'Resolved' : 'Raised';
+        for (let idx = 0; idx < geyserItemsInForm.length; idx++) {
+            const gItem = geyserItemsInForm[idx];
+            await saveComplaint({
+                id: `${Date.now()}_${idx}`,
+                customerName: geyserCustomerName.trim() || (customerPhone ? `Customer (${customerPhone})` : 'Geyser Customer'),
+                phoneNumber: customerPhone || '',
+                productModel: gItem.productName || 'Geyser',
+                issueType: 'Installation',
+                complaintId: cleanComplaintId || undefined,
+                billId: billId.trim() || undefined,
+                isGeyser: true,
+                installationDone: geyserInstallDone,
+                isResolved: geyserInstallDone,
+                status,
+                timeline: [
+                    {
+                        status,
+                        date: nowIso,
+                        note: geyserInstallDone
+                          ? `Geyser installation marked Done during sales entry${cleanComplaintId ? ` (ID: ${cleanComplaintId})` : ''}`
+                          : `Added to CRM as Need Installation during sales entry${cleanComplaintId ? ` (ID: ${cleanComplaintId})` : ''}`
+                    }
+                ],
+                date: ticketDateIso,
+            });
+        }
+        setSavedCrmSummary({
+            count: geyserItemsInForm.length,
+            complaintId: cleanComplaintId || undefined,
+            done: geyserInstallDone,
+        });
+    } else {
+        setSavedCrmSummary(null);
     }
 
     setIsSubmitting(false);
@@ -266,6 +327,12 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
       setBillId('');
       setTxnNumber('');
       setNotes('');
+      setAddGeyserToCrm(false);
+      setGeyserComplaintId('');
+      setGeyserCustomerName('');
+      setGeyserInstallDone(false);
+      setScanGeyserNotice(false);
+      setSavedCrmSummary(null);
       setShowSuccessModal(false);
       onEntryComplete();
   };
@@ -408,6 +475,121 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
           </div>
           )}
 
+        {!isWeekOff && hasGeyserSelected && (
+        <GlassCard className="p-5 rounded-3xl space-y-4 border-cyan-300/60 dark:border-cyan-500/30 bg-gradient-to-br from-cyan-500/10 via-blue-500/5 to-transparent">
+            <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-2xl bg-cyan-500/20 text-cyan-600 dark:text-cyan-400">
+                        <Flame size={18} />
+                    </div>
+                    <div>
+                        <p className="font-bold text-sm text-zinc-800 dark:text-zinc-100">Geyser CRM & Installation</p>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400">
+                            Enter Complaint ID & put in CRM as Need Installation
+                        </p>
+                    </div>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                        type="checkbox"
+                        className="sr-only peer"
+                        checked={addGeyserToCrm}
+                        onChange={e => setAddGeyserToCrm(e.target.checked)}
+                    />
+                    <div className="w-11 h-6 bg-zinc-200 rounded-full peer dark:bg-zinc-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600" />
+                </label>
+            </div>
+
+            {scanGeyserNotice && (
+                <div className="p-2.5 rounded-2xl bg-cyan-500/15 border border-cyan-500/30 text-[11px] font-semibold text-cyan-800 dark:text-cyan-200">
+                    Geyser detected on bill! Please enter Complaint ID below for easy CRM tracking.
+                </div>
+            )}
+
+            <div className="space-y-3">
+                <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                        <label className="text-[10px] font-bold text-cyan-700 dark:text-cyan-300 uppercase tracking-wider ml-1">
+                            Complaint / Installation ID
+                        </label>
+                        {copiedIdToast && (
+                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">Copied!</span>
+                        )}
+                    </div>
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            className="flex-1 bg-white/75 dark:bg-black/40 border border-cyan-300/60 dark:border-cyan-500/30 rounded-3xl px-4 py-3 text-sm font-mono font-bold outline-none focus:ring-2 focus:ring-cyan-500/30"
+                            placeholder="Enter Complaint ID (e.g. BAJ-123456)"
+                            value={geyserComplaintId}
+                            onChange={e => setGeyserComplaintId(e.target.value)}
+                        />
+                        {geyserComplaintId.trim() && (
+                            <button
+                                type="button"
+                                onClick={() => copyComplaintIdText(geyserComplaintId)}
+                                className="px-3.5 rounded-3xl bg-cyan-600 text-white text-xs font-bold flex items-center gap-1 hover:bg-cyan-700 transition-colors shrink-0"
+                                title="Copy Complaint ID"
+                            >
+                                <Copy size={14} /> Copy
+                            </button>
+                        )}
+                    </div>
+                </div>
+
+                {addGeyserToCrm && (
+                    <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Customer Name</label>
+                                <input
+                                    type="text"
+                                    className="w-full bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/20 rounded-3xl px-4 py-3 text-sm outline-none"
+                                    placeholder="Customer name for CRM"
+                                    value={geyserCustomerName}
+                                    onChange={e => setGeyserCustomerName(e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider ml-1">Customer Mobile</label>
+                                <input
+                                    type="tel"
+                                    maxLength={10}
+                                    className="w-full bg-white/60 dark:bg-black/40 border border-white/50 dark:border-white/20 rounded-3xl px-4 py-3 text-sm outline-none"
+                                    placeholder="10-digit mobile"
+                                    value={customerPhone}
+                                    onChange={e => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-1">
+                            <span className="text-[11px] font-bold text-zinc-600 dark:text-zinc-300 flex items-center gap-1.5">
+                                <Wrench size={14} className="text-cyan-500" /> Installation Status:
+                            </span>
+                            <div className="flex p-1 bg-white/60 dark:bg-zinc-800/70 rounded-2xl border border-white/50 dark:border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={() => setGeyserInstallDone(false)}
+                                    className={`px-3 py-1 rounded-xl text-[11px] font-bold transition-all ${!geyserInstallDone ? 'bg-amber-500 text-white shadow-sm' : 'text-zinc-500'}`}
+                                >
+                                    Need Installation
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setGeyserInstallDone(true)}
+                                    className={`px-3 py-1 rounded-xl text-[11px] font-bold transition-all ${geyserInstallDone ? 'bg-emerald-600 text-white shadow-sm' : 'text-zinc-500'}`}
+                                >
+                                    Done
+                                </button>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
+        </GlassCard>
+        )}
+
         {!isWeekOff && (
         <GlassCard className="p-5 rounded-3xl space-y-4">
             <div className="space-y-3">
@@ -502,12 +684,37 @@ const NewEntry: React.FC<NewEntryProps> = ({ user, onEntryComplete, initialDate,
             </div>
             <p className="text-zinc-600 dark:text-zinc-300 font-medium">{isWeekOff ? `Marked ${formattedDate} as Week Off.` : `Data added to cumulative report for ${formattedDate}.`}</p>
             {!isWeekOff && (
-            <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl text-left text-xs font-mono border border-zinc-200 dark:border-zinc-700 space-y-1">
-              <p className="font-bold text-zinc-800 dark:text-zinc-200 font-sans text-xs">Included in Daily Report:</p>
-              <div className="grid grid-cols-2 gap-1 text-[11px] text-zinc-600 dark:text-zinc-400">
-                <p>Instant geyser Qty: <strong className="text-cyan-600 dark:text-cyan-400">{currentInstantGeyser}</strong></p>
-                <p>Storage geyser Qty: <strong className="text-blue-600 dark:text-blue-400">{currentStorageGeyser}</strong></p>
+            <div className="p-3 bg-zinc-100 dark:bg-zinc-800/80 rounded-2xl text-left text-xs font-mono border border-zinc-200 dark:border-zinc-700 space-y-2">
+              <div>
+                <p className="font-bold text-zinc-800 dark:text-zinc-200 font-sans text-xs">Included in Daily Report:</p>
+                <div className="grid grid-cols-2 gap-1 text-[11px] text-zinc-600 dark:text-zinc-400 mt-1">
+                  <p>Instant geyser Qty: <strong className="text-cyan-600 dark:text-cyan-400">{currentInstantGeyser}</strong></p>
+                  <p>Storage geyser Qty: <strong className="text-blue-600 dark:text-blue-400">{currentStorageGeyser}</strong></p>
+                </div>
               </div>
+              {savedCrmSummary && (
+                <div className="pt-2 border-t border-zinc-200 dark:border-zinc-700 font-sans flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-bold text-cyan-700 dark:text-cyan-300">
+                      Added {savedCrmSummary.count} Geyser {savedCrmSummary.done ? '(Done)' : '(Need Installation)'} to CRM
+                    </p>
+                    {savedCrmSummary.complaintId && (
+                      <p className="text-[11px] font-mono text-zinc-600 dark:text-zinc-400">
+                        ID: {savedCrmSummary.complaintId}
+                      </p>
+                    )}
+                  </div>
+                  {savedCrmSummary.complaintId && (
+                    <button
+                      type="button"
+                      onClick={() => copyComplaintIdText(savedCrmSummary.complaintId!)}
+                      className="px-2.5 py-1 rounded-xl bg-cyan-600 text-white text-[10px] font-bold flex items-center gap-1"
+                    >
+                      <Copy size={11} /> {copiedIdToast ? 'Copied' : 'Copy ID'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
             )}
             {!isWeekOff && (

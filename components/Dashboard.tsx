@@ -1,10 +1,10 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Package, ClipboardList, PlusCircle, ShoppingBag, Flame } from 'lucide-react';
-import { DailyReport, SaleItem, UserProfile, Complaint, Tab } from '../types';
+import { List, Trash2, Maximize2, X, Download, Copy, Wallet, Target, Trophy, Ban, Pencil, Check, Filter, Search as SearchIcon, Quote, ChevronLeft, ChevronRight, Calendar as CalendarIcon, Package, ClipboardList, PlusCircle, ShoppingBag, Flame, Phone, Wrench } from 'lucide-react';
+import { DailyReport, SaleItem, UserProfile, Complaint, Tab, ComplaintStatus } from '../types';
 import { GlassCard, GlassButton, Modal } from './ui/GlassComponents';
-import { generateTextReport, formatToDisplayDate, calculateGeyserSales } from '../services/reportService';
-import { deleteDailyReport, updateDailyReport, getComplaints, getFromStore, getImagesForDate } from '../services/storageService';
+import { generateTextReport, formatToDisplayDate, calculateGeyserSales, isGeyserProduct } from '../services/reportService';
+import { deleteDailyReport, updateDailyReport, getComplaints, getFromStore, getImagesForDate, saveComplaint } from '../services/storageService';
 import { getMotivationalQuote } from '../services/aiService';
 
 // Fix: Added missing DashboardProps interface
@@ -51,7 +51,24 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
   const [editItemState, setEditItemState] = useState<SaleItem | null>(null);
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
-  
+  const [modalCopyToast, setModalCopyToast] = useState<string | null>(null);
+  const [crmQuickIdx, setCrmQuickIdx] = useState<number | null>(null);
+  const [crmQuickForm, setCrmQuickForm] = useState({ customerName: '', phoneNumber: '', complaintId: '', done: false });
+
+  const copyValue = (value: string, label: string) => {
+    if (!value) return;
+    navigator.clipboard?.writeText(value).catch(() => {});
+    setCopyFeedback(`${label} copied: ${value}`);
+    setModalCopyToast(`${label} copied: ${value}`);
+    setTimeout(() => setCopyFeedback(null), 2500);
+    setTimeout(() => setModalCopyToast(null), 2500);
+  };
+
+  const refreshComplaints = async () => {
+    const cList = await getComplaints();
+    setComplaints(cList);
+  };
+
   const handleCalendarDateClick = (dateStr: string, report?: DailyReport) => {
     if (report) {
       handleDateSelect(report);
@@ -64,7 +81,7 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
     }
   };
   
-  useEffect(() => { getMotivationalQuote(user.apiKey).then(setQuote); getComplaints().then(setComplaints); }, [user.apiKey]);
+  useEffect(() => { getMotivationalQuote(user.apiKey).then(setQuote); refreshComplaints(); }, [user.apiKey]);
 
   const { mtdValue, mtdPercentage, balance, monthName, currentMonthSalesCount } = useMemo(() => {
     const now = currentMonth;
@@ -219,7 +236,70 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
       const fullReport = await getFromStore<DailyReport>('sales', report.date);
       const images = await getImagesForDate(report.date);
       const reportWithImages = fullReport || report;
+      setCrmQuickIdx(null);
+      setModalCopyToast(null);
       setSelectedDateReport({ ...reportWithImages, billImages: images });
+      refreshComplaints();
+  };
+
+  const openQuickCrmForm = (item: SaleItem, idx: number) => {
+      setCrmQuickIdx(idx);
+      setCrmQuickForm({
+          customerName: '',
+          phoneNumber: item.customerPhone || '',
+          complaintId: item.complaintId || '',
+          done: false
+      });
+  };
+
+  const handleSaveQuickCrm = async (report: DailyReport, item: SaleItem, idx: number) => {
+      const nowIso = new Date().toISOString();
+      const timePart = nowIso.split('T')[1] || '12:00:00.000Z';
+      const status: ComplaintStatus = crmQuickForm.done ? 'Resolved' : 'Raised';
+      const cleanComplaintId = crmQuickForm.complaintId.trim();
+      const cleanPhone = crmQuickForm.phoneNumber.trim();
+      const isGeyser = isGeyserProduct(item.productName);
+
+      await saveComplaint({
+          id: `${Date.now()}_${idx}`,
+          customerName: crmQuickForm.customerName.trim() || (cleanPhone ? `Customer (${cleanPhone})` : 'Customer'),
+          phoneNumber: cleanPhone,
+          productModel: item.productName,
+          issueType: 'Installation',
+          complaintId: cleanComplaintId || undefined,
+          billId: item.billId || undefined,
+          isGeyser,
+          installationDone: crmQuickForm.done,
+          isResolved: crmQuickForm.done,
+          status,
+          timeline: [{
+              status,
+              date: nowIso,
+              note: crmQuickForm.done
+                ? `Added from Sales Calendar (${formatToDisplayDate(report.date)}) as Installation Done`
+                : `Added from Sales Calendar (${formatToDisplayDate(report.date)}) as Need Installation`
+          }],
+          date: `${report.date}T${timePart}`
+      });
+
+      // Sync complaintId/phone back to sale item if updated
+      if (cleanComplaintId !== (item.complaintId || '') || cleanPhone !== (item.customerPhone || '')) {
+          const updatedItems = [...(report.items || [])];
+          updatedItems[idx] = {
+              ...updatedItems[idx],
+              complaintId: cleanComplaintId || updatedItems[idx].complaintId,
+              customerPhone: cleanPhone || updatedItems[idx].customerPhone
+          };
+          const updatedReport = { ...report, items: updatedItems };
+          await updateDailyReport(report.date, updatedReport);
+          setSelectedDateReport(updatedReport);
+          onDataChange();
+      }
+
+      await refreshComplaints();
+      setCrmQuickIdx(null);
+      setModalCopyToast('Added to CRM as Need Installation!');
+      setTimeout(() => setModalCopyToast(null), 2500);
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -379,13 +459,21 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
               const report = salesMap.get(d.dateStr);
               const isToday = d.dateStr === todayStr;
               const isWeekOff = report?.isWeekOff;
+              const hasPhones = Boolean(report?.items?.some(it => it?.customerPhone));
+              const hasGeyser = Boolean(report?.items?.some(it => isGeyserProduct(it?.productName)));
               return (
                 <div 
                   key={d.dateStr} 
                   onClick={() => handleCalendarDateClick(d.dateStr, report)} 
-                  title={report ? `${report.totalQty} items sold` : "Click to enter detail for this date"}
+                  title={report ? `${report.totalQty} items sold${hasPhones ? ' • Has mobile no.' : ''}` : "Click to enter detail for this date"}
                   className={`aspect-square rounded-3xl flex flex-col items-center justify-center cursor-pointer transition-all border shadow-sm relative overflow-hidden group ${isToday ? 'border-zinc-900 dark:border-white ring-1 ring-zinc-200 dark:ring-zinc-700' : 'border-white/40 dark:border-white/10 hover:border-blue-400 hover:bg-white/60 dark:hover:bg-white/10'} ${report ? (isWeekOff ? 'bg-gray-200/80 dark:bg-gray-800/80' : 'bg-white/60 dark:bg-zinc-800/80') : 'bg-white/20 dark:bg-zinc-900/20'}`}
                 >
+                  {(hasPhones || hasGeyser) && !isWeekOff && (
+                    <div className="absolute top-1.5 right-1.5 flex items-center gap-0.5">
+                      {hasGeyser && <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" title="Geyser sold" />}
+                      {hasPhones && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" title="Customer phone available" />}
+                    </div>
+                  )}
                   <span className={`text-xs ${isToday ? 'font-bold text-black dark:text-white' : ''}`}>{d.day}</span>
                   {report ? (
                     <span className={`text-[9px] font-bold mt-0.5 ${isWeekOff ? 'text-gray-500' : 'text-green-600 dark:text-green-400'}`}>
@@ -426,6 +514,47 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
             {selectedDateReport.isWeekOff ? ( <div className="text-center py-8 bg-white/40 dark:bg-white/5 rounded-3xl border border-dashed border-white/50 dark:border-white/20 backdrop-blur-sm"><Ban size={40} className="mx-auto text-zinc-400 mb-2" /><p className="text-zinc-500 font-medium">Marked as Week Off</p></div> ) : (
                 <>
                 <div className="grid grid-cols-2 gap-4"><div className="bg-blue-50/50 dark:bg-blue-900/30 border border-blue-100/50 dark:border-blue-500/20 backdrop-blur-sm p-3 rounded-3xl text-center"><p className="text-xs text-zinc-500">Value</p><p className="font-bold text-blue-600">₹{selectedDateReport.totalValue.toLocaleString()}</p></div><div className="bg-purple-50/50 dark:bg-purple-900/30 border border-purple-100/50 dark:border-purple-500/20 backdrop-blur-sm p-3 rounded-3xl text-center"><p className="text-xs text-zinc-500">Quantity</p><p className="font-bold text-purple-600">{selectedDateReport.totalQty}</p></div></div>
+                {modalCopyToast && (
+                  <div className="p-2.5 bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 rounded-2xl text-center text-xs font-bold flex items-center justify-center gap-1.5">
+                    <Check size={14} />
+                    <span>{modalCopyToast}</span>
+                  </div>
+                )}
+                {(() => {
+                  const uniquePhones = Array.from(new Set(
+                    (selectedDateReport.items || []).map(it => it.customerPhone?.trim()).filter(Boolean) as string[]
+                  ));
+                  if (uniquePhones.length === 0) return null;
+                  return (
+                    <div className="p-3 rounded-2xl bg-blue-50/60 dark:bg-blue-900/20 border border-blue-200/50 dark:border-blue-500/20 space-y-2">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
+                        <Phone size={12} /> Customer Contacts (Tap to Copy Mobile)
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {uniquePhones.map(phone => (
+                          <div key={phone} className="flex items-center gap-1 bg-white/80 dark:bg-zinc-800/80 border border-blue-200/60 dark:border-blue-500/30 rounded-xl px-2.5 py-1.5 shadow-xs">
+                            <button
+                              type="button"
+                              onClick={() => copyValue(phone, 'Mobile number')}
+                              className="flex items-center gap-1.5 text-xs font-mono font-bold text-blue-600 dark:text-blue-400 hover:underline"
+                              title="Click to copy mobile number"
+                            >
+                              <Copy size={11} />
+                              <span>{phone}</span>
+                            </button>
+                            <a
+                              href={`tel:${phone}`}
+                              className="ml-1 p-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/25"
+                              title={`Call ${phone}`}
+                            >
+                              <Phone size={11} />
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
                 {(() => {
                   const dateGeysers = calculateGeyserSales(selectedDateReport, sales);
                   return (
@@ -458,12 +587,145 @@ const Dashboard: React.FC<DashboardProps> = ({ sales, user, onDataChange, onNavi
                 <div className="space-y-3"><h4 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider sticky top-0 bg-white/80 dark:bg-zinc-900/80 backdrop-blur-xl py-2 z-10">Items Sold</h4>
                     {(selectedDateReport.items || []).map((item, idx) => {
                         const isEditing = editingItemIndex === idx;
+                        const itemIsGeyser = isGeyserProduct(item.productName);
+                        const linkedCrm = complaints.find(c =>
+                          (item.complaintId && c.complaintId === item.complaintId) ||
+                          (c.date?.startsWith(selectedDateReport.date) && c.productModel === item.productName && (!item.customerPhone || c.phoneNumber === item.customerPhone))
+                        );
+                        const isQuickCrmOpen = crmQuickIdx === idx;
                         return (
-                        <div key={idx} className={`flex justify-between items-center p-3 rounded-3xl border transition-all ${isEditing ? 'bg-blue-50/50 dark:bg-blue-900/20 border-blue-200/50 dark:border-blue-500/20' : 'bg-white/40 dark:bg-white/5 border-white/40 dark:border-white/10 backdrop-blur-sm'}`}>
+                        <div key={idx} className={`p-3 rounded-3xl border transition-all space-y-2 ${isEditing ? 'bg-blue-50/50 dark:bg-blue-900/20 border-blue-200/50 dark:border-blue-500/20' : 'bg-white/40 dark:bg-white/5 border-white/40 dark:border-white/10 backdrop-blur-sm'}`}>
                             {isEditing && editItemState ? (
-                                <div className="w-full space-y-2"><input className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-sm font-medium focus:outline-none text-zinc-800 dark:text-white" value={editItemState.productName} onChange={(e) => setEditItemState({...editItemState, productName: e.target.value})} placeholder="Product Name" /><div className="flex gap-2"><div className="flex-1"><label className="text-[9px] uppercase text-zinc-500 font-bold">Qty</label><input type="number" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-sm focus:outline-none text-zinc-800 dark:text-white" value={editItemState.quantity} onChange={(e) => setEditItemState({...editItemState, quantity: parseInt(e.target.value) || 0})} /></div><div className="flex-1"><label className="text-[9px] uppercase text-zinc-500 font-bold">Unit Price</label><input type="number" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-sm focus:outline-none text-zinc-800 dark:text-white" value={editItemState.price} onChange={(e) => setEditItemState({...editItemState, price: parseFloat(e.target.value) || 0})} /></div></div><div className="grid grid-cols-3 gap-2"><div><label className="text-[9px] uppercase text-zinc-500 font-bold">Phone</label><input type="text" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-xs focus:outline-none text-zinc-800 dark:text-white" value={editItemState.customerPhone || ''} onChange={(e) => setEditItemState({...editItemState, customerPhone: e.target.value})} /></div><div><label className="text-[9px] uppercase text-zinc-500 font-bold">Bill ID</label><input type="text" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-xs focus:outline-none text-zinc-800 dark:text-white" value={editItemState.billId || ''} onChange={(e) => setEditItemState({...editItemState, billId: e.target.value})} /></div><div><label className="text-[9px] uppercase text-zinc-500 font-bold">Txn No</label><input type="text" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-xs focus:outline-none text-zinc-800 dark:text-white" value={editItemState.txnNumber || ''} onChange={(e) => setEditItemState({...editItemState, txnNumber: e.target.value})} /></div></div><div className="flex justify-end gap-2 mt-2"><button onClick={cancelEdit} className="p-1 rounded-3xl bg-zinc-200/80 dark:bg-zinc-700/80 text-zinc-600 dark:text-zinc-300"><X size={14} /></button><button onClick={() => saveEditItem(selectedDateReport, idx)} className="p-1 rounded-3xl bg-green-500/80 text-white"><Check size={14} /></button></div></div>
+                                <div className="w-full space-y-2"><input className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-sm font-medium focus:outline-none text-zinc-800 dark:text-white" value={editItemState.productName} onChange={(e) => setEditItemState({...editItemState, productName: e.target.value})} placeholder="Product Name" /><div className="flex gap-2"><div className="flex-1"><label className="text-[9px] uppercase text-zinc-500 font-bold">Qty</label><input type="number" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-sm focus:outline-none text-zinc-800 dark:text-white" value={editItemState.quantity} onChange={(e) => setEditItemState({...editItemState, quantity: parseInt(e.target.value) || 0})} /></div><div className="flex-1"><label className="text-[9px] uppercase text-zinc-500 font-bold">Unit Price</label><input type="number" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-sm focus:outline-none text-zinc-800 dark:text-white" value={editItemState.price} onChange={(e) => setEditItemState({...editItemState, price: parseFloat(e.target.value) || 0})} /></div></div><div className="grid grid-cols-2 sm:grid-cols-4 gap-2"><div><label className="text-[9px] uppercase text-zinc-500 font-bold">Phone</label><input type="text" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-xs focus:outline-none text-zinc-800 dark:text-white" value={editItemState.customerPhone || ''} onChange={(e) => setEditItemState({...editItemState, customerPhone: e.target.value})} /></div><div><label className="text-[9px] uppercase text-zinc-500 font-bold">Bill ID</label><input type="text" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-xs focus:outline-none text-zinc-800 dark:text-white" value={editItemState.billId || ''} onChange={(e) => setEditItemState({...editItemState, billId: e.target.value})} /></div><div><label className="text-[9px] uppercase text-zinc-500 font-bold">Txn No</label><input type="text" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-xs focus:outline-none text-zinc-800 dark:text-white" value={editItemState.txnNumber || ''} onChange={(e) => setEditItemState({...editItemState, txnNumber: e.target.value})} /></div><div><label className="text-[9px] uppercase text-zinc-500 font-bold">Complaint ID</label><input type="text" className="w-full bg-transparent border-b border-blue-300 dark:border-blue-500/50 text-xs focus:outline-none text-zinc-800 dark:text-white" value={editItemState.complaintId || ''} onChange={(e) => setEditItemState({...editItemState, complaintId: e.target.value})} /></div></div><div className="flex justify-end gap-2 mt-2"><button onClick={cancelEdit} className="p-1 rounded-3xl bg-zinc-200/80 dark:bg-zinc-700/80 text-zinc-600 dark:text-zinc-300"><X size={14} /></button><button onClick={() => saveEditItem(selectedDateReport, idx)} className="p-1 rounded-3xl bg-green-500/80 text-white"><Check size={14} /></button></div></div>
                             ) : (
-                                <><div className="flex-1"><p className="font-medium text-sm text-zinc-800 dark:text-white">{item.productName}</p><p className="text-xs text-zinc-500">₹{item.price} x {item.quantity}</p>{(item.customerPhone || item.billId || item.txnNumber) && (<div className="mt-1 flex flex-wrap gap-2 text-[10px] text-zinc-400">{item.customerPhone && <span>📞 {item.customerPhone}</span>}{item.billId && <span>🧾 {item.billId}</span>}{item.txnNumber && <span>💳 {item.txnNumber}</span>}</div>)}</div><div className="flex items-center gap-2"><p className="font-bold text-sm mr-2 text-zinc-800 dark:text-white">₹{item.price * item.quantity}</p><button onClick={() => startEditItem(item, idx)} className="text-blue-500 hover:text-blue-600 p-1"><Pencil size={14} /></button><button onClick={() => handleRemoveItem(selectedDateReport, idx)} className="text-red-500 hover:text-red-600 p-1"><Trash2 size={14} /></button></div></>
+                                <>
+                                <div className="flex justify-between items-start gap-2">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <p className="font-medium text-sm text-zinc-800 dark:text-white">{item.productName}</p>
+                                      {itemIsGeyser && (
+                                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 font-bold uppercase">
+                                          Geyser
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-zinc-500">₹{item.price} x {item.quantity}</p>
+                                    {(item.customerPhone || item.billId || item.txnNumber || item.complaintId) && (
+                                      <div className="mt-1.5 flex flex-wrap gap-1.5 text-[10px]">
+                                        {item.customerPhone && (
+                                          <button
+                                            type="button"
+                                            onClick={() => copyValue(item.customerPhone!, 'Mobile number')}
+                                            className="px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 font-bold flex items-center gap-1 hover:bg-blue-500/20"
+                                            title="Click to copy mobile number"
+                                          >
+                                            <span>📞 {item.customerPhone}</span>
+                                            <Copy size={9} />
+                                          </button>
+                                        )}
+                                        {item.complaintId && (
+                                          <button
+                                            type="button"
+                                            onClick={() => copyValue(item.complaintId!, 'Complaint ID')}
+                                            className="px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 font-mono font-bold flex items-center gap-1 hover:bg-cyan-500/20"
+                                            title="Click to copy Complaint ID"
+                                          >
+                                            <span>ID: {item.complaintId}</span>
+                                            <Copy size={9} />
+                                          </button>
+                                        )}
+                                        {item.billId && <span className="px-1.5 py-0.5 text-zinc-400">🧾 {item.billId}</span>}
+                                        {item.txnNumber && <span className="px-1.5 py-0.5 text-zinc-400">💳 {item.txnNumber}</span>}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <p className="font-bold text-sm mr-1 text-zinc-800 dark:text-white">₹{item.price * item.quantity}</p>
+                                    <button onClick={() => startEditItem(item, idx)} className="text-blue-500 hover:text-blue-600 p-1"><Pencil size={14} /></button>
+                                    <button onClick={() => handleRemoveItem(selectedDateReport, idx)} className="text-red-500 hover:text-red-600 p-1"><Trash2 size={14} /></button>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-white/30 dark:border-white/5">
+                                  {linkedCrm ? (
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${linkedCrm.status === 'Resolved' || linkedCrm.installationDone ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300' : 'bg-amber-500/15 text-amber-700 dark:text-amber-300'}`}>
+                                        {linkedCrm.status === 'Resolved' || linkedCrm.installationDone ? 'CRM: Done ✓' : `CRM: ${linkedCrm.status || 'Need Installation'}`}
+                                      </span>
+                                      {linkedCrm.complaintId && (
+                                        <button
+                                          type="button"
+                                          onClick={() => copyValue(linkedCrm.complaintId!, 'Complaint ID')}
+                                          className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-700 dark:text-cyan-300 font-bold flex items-center gap-1"
+                                        >
+                                          {linkedCrm.complaintId} <Copy size={9} />
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => isQuickCrmOpen ? setCrmQuickIdx(null) : openQuickCrmForm(item, idx)}
+                                      className={`text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1 transition-colors ${itemIsGeyser ? 'bg-cyan-600 text-white hover:bg-cyan-700' : 'bg-zinc-200/80 dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-300 dark:hover:bg-zinc-700'}`}
+                                    >
+                                      <Wrench size={11} /> {isQuickCrmOpen ? 'Cancel' : 'Put in CRM (Need Installation)'}
+                                    </button>
+                                  )}
+                                </div>
+                                {isQuickCrmOpen && (
+                                  <div className="p-3 rounded-2xl bg-cyan-500/10 border border-cyan-500/25 space-y-2">
+                                    <p className="text-[10px] font-bold uppercase text-cyan-800 dark:text-cyan-300">Add to CRM Installation</p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                      <input
+                                        type="text"
+                                        placeholder="Customer Name"
+                                        value={crmQuickForm.customerName}
+                                        onChange={e => setCrmQuickForm({ ...crmQuickForm, customerName: e.target.value })}
+                                        className="px-2.5 py-1.5 rounded-xl text-xs bg-white/80 dark:bg-zinc-900/70 border border-white/60 dark:border-white/10 outline-none"
+                                      />
+                                      <input
+                                        type="tel"
+                                        maxLength={10}
+                                        placeholder="Mobile No."
+                                        value={crmQuickForm.phoneNumber}
+                                        onChange={e => setCrmQuickForm({ ...crmQuickForm, phoneNumber: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                        className="px-2.5 py-1.5 rounded-xl text-xs bg-white/80 dark:bg-zinc-900/70 border border-white/60 dark:border-white/10 outline-none"
+                                      />
+                                      <input
+                                        type="text"
+                                        placeholder="Complaint ID"
+                                        value={crmQuickForm.complaintId}
+                                        onChange={e => setCrmQuickForm({ ...crmQuickForm, complaintId: e.target.value })}
+                                        className="px-2.5 py-1.5 rounded-xl text-xs font-mono bg-white/80 dark:bg-zinc-900/70 border border-white/60 dark:border-white/10 outline-none"
+                                      />
+                                    </div>
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex gap-1">
+                                        <button
+                                          type="button"
+                                          onClick={() => setCrmQuickForm({ ...crmQuickForm, done: false })}
+                                          className={`px-2 py-1 rounded-lg text-[10px] font-bold ${!crmQuickForm.done ? 'bg-amber-500 text-white' : 'bg-white/60 dark:bg-zinc-800 text-zinc-500'}`}
+                                        >
+                                          Need Installation
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setCrmQuickForm({ ...crmQuickForm, done: true })}
+                                          className={`px-2 py-1 rounded-lg text-[10px] font-bold ${crmQuickForm.done ? 'bg-emerald-600 text-white' : 'bg-white/60 dark:bg-zinc-800 text-zinc-500'}`}
+                                        >
+                                          Done
+                                        </button>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleSaveQuickCrm(selectedDateReport, item, idx)}
+                                        className="px-3 py-1 rounded-xl bg-cyan-600 text-white text-[10px] font-bold hover:bg-cyan-700"
+                                      >
+                                        Save to CRM
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                                </>
                             )}
                         </div>
                     )})}

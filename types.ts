@@ -6,6 +6,7 @@ export interface SaleItem {
   customerPhone?: string;
   billId?: string;
   txnNumber?: string;
+  complaintId?: string;
 }
 
 export interface DailyReport {
@@ -88,6 +89,10 @@ export interface Complaint {
   status: ComplaintStatus;
   timeline: ComplaintTimelineEvent[];
   date: string;
+  complaintId?: string;
+  billId?: string;
+  isGeyser?: boolean;
+  installationDone?: boolean;
   repairsDone?: string;
   partsReplaced?: string;
   /** @deprecated use status === 'Resolved' */

@@ -84,6 +84,16 @@ export const normalizeDateString = (input: any): string => {
   return str;
 };
 
+const isDateKeyedStore = (storeName: string): boolean =>
+  storeName === 'sales' || storeName === 'images' || storeName === 'attendance' || storeName === 'eod';
+
+const resolveItemKey = (storeName: string, item: any, fallback?: string): string => {
+  if (isDateKeyedStore(storeName)) {
+    return item?.date ? normalizeDateString(item.date) : (fallback || item?.id || item?.uid || '');
+  }
+  return item?.id || item?.uid || fallback || (item?.date ? normalizeDateString(item.date) : '');
+};
+
 // Local storage backup keys
 const getLocalKey = (storeName: string, key: string) => `${LS_KEYS.STORE_PREFIX}${storeName}_${getUid()}_${key}`;
 const getLocalCollectionKey = (storeName: string) => `${LS_KEYS.STORE_PREFIX}${storeName}_${getUid()}_all`;
@@ -95,7 +105,7 @@ const getLocalItem = <T>(storeName: string, key: string): T | undefined => {
 
     // Fallback: check collection
     const all = getLocalAll<T>(storeName);
-    const found = all.find((i: any) => (i?.date || i?.id || i?.uid) === key);
+    const found = all.find((i: any) => resolveItemKey(storeName, i) === key);
     return found;
   } catch {
     return undefined;
@@ -109,8 +119,8 @@ const setLocalItem = <T>(storeName: string, key: string, data: T): void => {
   try {
     localStorage.setItem(getLocalKey(storeName, key), JSON.stringify(data));
     const all = getLocalAll<T>(storeName);
-    const idKey = (data as any)?.date || (data as any)?.id || key;
-    const existingIndex = all.findIndex((i: any) => (i?.date || i?.id || i?.uid) === idKey);
+    const idKey = resolveItemKey(storeName, data, key);
+    const existingIndex = all.findIndex((i: any) => resolveItemKey(storeName, i) === idKey);
     if (existingIndex >= 0) {
       all[existingIndex] = data;
     } else {
@@ -141,7 +151,7 @@ const removeLocalItem = (storeName: string, key: string): void => {
   try {
     localStorage.removeItem(getLocalKey(storeName, key));
     const all = getLocalAll(storeName);
-    const filtered = all.filter((i: any) => (i?.date || i?.id || i?.uid) !== key);
+    const filtered = all.filter((i: any) => resolveItemKey(storeName, i) !== key);
     localStorage.setItem(getLocalCollectionKey(storeName), JSON.stringify(filtered));
   } catch (e) {
     console.error("removeLocalItem error", e);
@@ -166,8 +176,8 @@ const getLocalAll = <T>(storeName: string): T[] => {
         const parsed = JSON.parse(primaryRaw);
         if (Array.isArray(parsed)) {
           parsed.forEach((item: any) => {
-            const key = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid || JSON.stringify(item));
-            if (item?.date) item.date = key;
+            const key = resolveItemKey(storeName, item, JSON.stringify(item));
+            if (isDateKeyedStore(storeName) && item?.date) item.date = key;
             map.set(key, item);
           });
         }
@@ -179,9 +189,6 @@ const getLocalAll = <T>(storeName: string): T[] => {
       const k = localStorage.key(i);
       if (!k) continue;
 
-      // Only merge if it belongs to current active UID OR the legacy 'default_user' (unregistered)
-      // Removed strict partitioning so legacy Firebase-UID data is not lost on the same device.
-
       if (k.startsWith(`${LS_KEYS.STORE_PREFIX}${storeName}_`) && k.endsWith('_all') && k !== primaryKey) {
         try {
           const raw = localStorage.getItem(k);
@@ -189,8 +196,8 @@ const getLocalAll = <T>(storeName: string): T[] => {
             const parsed = JSON.parse(raw);
             if (Array.isArray(parsed)) {
               parsed.forEach((item: any) => {
-                const key = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid || JSON.stringify(item));
-                if (item?.date) item.date = key;
+                const key = resolveItemKey(storeName, item, JSON.stringify(item));
+                if (isDateKeyedStore(storeName) && item?.date) item.date = key;
                 if (!map.has(key)) {
                   map.set(key, item);
                 }
@@ -204,9 +211,9 @@ const getLocalAll = <T>(storeName: string): T[] => {
           const raw = localStorage.getItem(k);
           if (raw) {
             const item = JSON.parse(raw);
-            const key = item?.date ? normalizeDateString(item.date) : (item?.id || item?.uid);
+            const key = resolveItemKey(storeName, item);
             if (key) {
-              if (item?.date) item.date = key;
+              if (isDateKeyedStore(storeName) && item?.date) item.date = key;
               if (!map.has(key)) {
                 map.set(key, item);
               }
@@ -262,11 +269,11 @@ export const getAllFromStore = async <T>(storeName: string): Promise<T[]> => {
 };
 
 export const putToStore = async <T>(storeName: string, key: string, data: T): Promise<void> => {
-  const normKey = storeName === 'sales' || storeName === 'images' || storeName === 'attendance' || storeName === 'eod' ? normalizeDateString(key) : key;
+  const normKey = isDateKeyedStore(storeName) ? normalizeDateString(key) : key;
   const uid = getUid();
   const docId = getDocId(normKey, storeName);
   const payload = { ...(data as any), userId: (data as any)?.userId || uid };
-  if (payload.date) payload.date = normKey;
+  if (payload.date && isDateKeyedStore(storeName)) payload.date = normKey;
 
   if (storeName === 'images') {
     const images = (payload as any)?.images || [];
@@ -421,6 +428,9 @@ export const saveComplaint = async (complaint: Complaint) => {
 };
 export const updateComplaint = async (updated: Complaint) => {
   await putToStore('crm', updated.id, updated);
+};
+export const deleteComplaint = async (id: string) => {
+  await deleteFromStore('crm', id);
 };
 
 export const getFollowUps = (): Promise<FollowUp[]> => getAllFromStore<FollowUp>('followups');
@@ -739,13 +749,17 @@ export const importFullBackup = async (jsonString: string): Promise<{ success: b
             customerName: comp.customerName || comp.name || 'Customer',
             phoneNumber: comp.phoneNumber || comp.phone || '',
             productModel: comp.productModel || comp.product || comp.model || 'Model',
-            issueType: comp.issueType || 'Complaint',
+            issueType: comp.issueType === 'Store Stack' ? 'Store Stock' : (comp.issueType || 'Complaint'),
             customProductName: comp.customProductName || '',
+            complaintId: comp.complaintId || '',
+            billId: comp.billId || '',
+            isGeyser: Boolean(comp.isGeyser),
+            installationDone: comp.installationDone !== undefined ? Boolean(comp.installationDone) : (comp.status === 'Resolved' || comp.isResolved),
             status: comp.status || (comp.isResolved ? 'Resolved' : 'Raised'),
             timeline: Array.isArray(comp.timeline) ? comp.timeline : [
               { status: comp.status || 'Raised', date: comp.date || new Date().toISOString(), note: 'Imported' }
             ],
-            date: normalizeDateString(comp.date || new Date().toISOString()),
+            date: comp.date || new Date().toISOString(),
             repairsDone: comp.repairsDone || '',
             partsReplaced: comp.partsReplaced || '',
             userId: currentUid,

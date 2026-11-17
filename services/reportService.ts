@@ -118,6 +118,12 @@ export const isStorageGeyser = (productName?: string): boolean => {
   return false;
 };
 
+export const isGeyserProduct = (productName?: string): boolean => {
+  if (!productName) return false;
+  const name = productName.trim().toLowerCase();
+  return isInstantGeyser(name) || isStorageGeyser(name) || name.includes('geyser') || name.includes('water heater');
+};
+
 export interface GeyserSalesSummary {
   todayInstant: number;
   todayStorage: number;
